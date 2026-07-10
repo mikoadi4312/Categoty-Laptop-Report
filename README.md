@@ -87,6 +87,32 @@ DB_PASSWORD=your_password_here
 
 Run commands from the `laptop_report_system` directory.
 
+## Streamlit Cloud Deployment
+
+The app can run on Streamlit Community Cloud, but the PostgreSQL database must be hosted online. A database running on your laptop with `DB_HOST=localhost` cannot be reached by Streamlit Cloud.
+
+Set the database credentials in Streamlit Cloud:
+
+1. Open the deployed app settings.
+2. Go to `Secrets`.
+3. Add either one connection string:
+
+```toml
+DATABASE_URL = "postgresql://USER:PASSWORD@HOST:5432/DB_NAME"
+```
+
+Or add separate values:
+
+```toml
+DB_HOST = "your-cloud-db-host"
+DB_PORT = "5432"
+DB_NAME = "laptop_report"
+DB_USER = "your-db-user"
+DB_PASSWORD = "your-db-password"
+```
+
+After changing secrets, reboot the Streamlit app from the app menu.
+
 ### Web Upload
 
 Start the web app:
