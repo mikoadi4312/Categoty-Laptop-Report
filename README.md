@@ -1,0 +1,188 @@
+# LAPTOP Daily Reporting System
+
+PostgreSQL-based ETL and Excel reporting for the LAPTOP category.
+
+The system reads two daily files:
+
+- `REVENUEERA` sales file
+- `GeneralInventory` stock snapshot file
+
+It generates an Excel report with:
+
+- `LAPTOP REPORT`: brand-level category breakdown
+- `SHOP LEVEL`: store-level performance with brands as dynamic column groups
+
+## Project Structure
+
+```text
+laptop_report_system/
+├── config/
+│   └── database.py
+├── models/
+│   └── schema.sql
+├── etl/
+│   ├── upload_sales.py
+│   └── upload_stock.py
+├── reports/
+│   └── generate_laptop_report.py
+├── .env.example
+├── requirements.txt
+└── README.md
+```
+
+## 1. PostgreSQL Setup
+
+Create the database:
+
+```bash
+createdb laptop_report
+```
+
+Or from `psql`:
+
+```sql
+CREATE DATABASE laptop_report;
+```
+
+Install the schema:
+
+```bash
+psql -d laptop_report -f models/schema.sql
+```
+
+## 2. Python Setup
+
+Create and activate a virtual environment:
+
+```bash
+python -m venv .venv
+.venv\Scripts\activate
+```
+
+Install dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+## 3. Environment File
+
+Copy `.env.example` to `.env`:
+
+```bash
+copy .env.example .env
+```
+
+Edit `.env` with your PostgreSQL credentials:
+
+```text
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=laptop_report
+DB_USER=postgres
+DB_PASSWORD=your_password_here
+```
+
+## 4. Daily Workflow
+
+Run commands from the `laptop_report_system` directory.
+
+### Web Upload
+
+Start the web app:
+
+```bash
+streamlit run web_app.py
+```
+
+Open the local URL shown by Streamlit, usually:
+
+```text
+http://localhost:8501
+```
+
+Use the web tabs:
+
+- `Sales`: upload `REVENUEERA` and click `Upload Sales`.
+- `Stock`: upload `GeneralInventory`, choose the stock date, and click `Upload Stock`.
+- `Report`: choose the report date, generate the Excel file, and download it.
+
+### Command Line
+
+Upload sales:
+
+```bash
+python etl/upload_sales.py --file REVENUEERA_YYYYMMDD.xlsx --uploaded_by "YourName"
+```
+
+Upload stock:
+
+```bash
+python etl/upload_stock.py --file GeneralInventory_YYYYMMDD.xlsx --uploaded_by "YourName" --date YYYY-MM-DD
+```
+
+Generate report:
+
+```bash
+python reports/generate_laptop_report.py --date YYYY-MM-DD --output LAPTOP_REPORT_YYYYMMDD.xlsx
+```
+
+Re-uploading the same file is safe. Sales and stock tables use upserts on date, store, and brand, so rows are updated instead of duplicated.
+
+## Input Rules
+
+### Sales File
+
+Required columns:
+
+```text
+DATE, IDStore, Store Name, MainCategory, SubCategory, Product code,
+Product name, Brand name, InventoryStatus, TypeofOutput, Quantity_1, REVENUE
+```
+
+Processing:
+
+- Parses `DATE` as `DD/MM/YYYY`.
+- Strips whitespace from string columns.
+- Keeps rows where `MainCategory` contains `Laptop`, case-insensitive.
+- Aggregates by `sale_date`, `IDStore`, `Store Name`, and `Brand name`.
+- `Quantity_1` is summed as net quantity, so negative return quantities reduce sales.
+- `REVENUE` is summed as IDR numeric value.
+
+### Stock File
+
+Required columns:
+
+```text
+ID Store, Store Name, COMPANYBRANDNAME, Main Category, Sub Category,
+ID Model, Product code, Product name, Inventory Status, Quantity_1, QUANTITYEX
+```
+
+Processing:
+
+- Strips numeric category prefixes, for example `1584 - INDO - Laptop` becomes `INDO - Laptop`.
+- Keeps rows where both cleaned `Main Category` and cleaned `Sub Category` contain `Laptop`, case-insensitive.
+- Extracts brand from `Product name` pattern `Laptop [Brand] [model]`.
+- Falls back to `COMPANYBRANDNAME` if the product name does not match that pattern.
+- `1-New` and `5-Error (New)` are counted as `new_stock`.
+- `3-Show` and `7-Show (Sample)` are counted as `demo_units`.
+- `stock_volume = new_stock + demo_units`.
+
+## Report Logic
+
+`LAPTOP REPORT`:
+
+- Day sales are taken from `fact_sales.sale_date = target date`.
+- MTD sales are month-to-date through the target date.
+- Stock is taken from the latest `fact_stock.stock_date` available on or before the target date.
+- Stock Day is calculated as `stock_volume / (mtd_qty / target_date.day)`.
+- Same-period quantity, same-period revenue, and growth rate are currently set to `0`.
+- Brands are sorted by MTD revenue descending.
+- Grand total is shown at the top and bottom.
+
+`SHOP LEVEL`:
+
+- Store rows are sorted by total MTD revenue descending.
+- Brand columns are generated dynamically from uploaded sales data.
+- A total revenue group is added at the far right.
+- Grand total is shown at the bottom.

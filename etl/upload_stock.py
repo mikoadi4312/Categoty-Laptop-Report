@@ -1,0 +1,294 @@
+import argparse
+import sys
+from datetime import datetime
+from pathlib import Path
+
+import pandas as pd
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from config.database import get_connection  # noqa: E402
+
+
+REQUIRED_COLUMNS = [
+    "ID Store",
+    "Store Name",
+    "COMPANYBRANDNAME",
+    "Main Category",
+    "Sub Category",
+    "ID Model",
+    "Product code",
+    "Product name",
+    "Inventory Status",
+    "Quantity_1",
+    "QUANTITYEX",
+]
+
+NEW_STATUSES = {"1-New", "5-Error (New)"}
+DEMO_STATUSES = {"3-Show", "7-Show (Sample)"}
+
+BRAND_CANONICAL = {
+    "LENOVO": "Lenovo",
+    "ASUS": "Asus",
+    "ACER": "Acer",
+    "HP": "HP",
+    "DELL": "Dell",
+    "MSI": "MSI",
+    "APPLE": "Apple",
+    "AXIOO": "Axioo",
+    "ADVAN": "Advan",
+}
+
+
+def normalize_brand(value) -> str:
+    text = " ".join(str(value or "").strip().split())
+    if not text or text.lower() == "nan":
+        return "UNKNOWN"
+    upper = text.upper()
+    return BRAND_CANONICAL.get(upper, text.title())
+
+
+def strip_numeric_prefix(category: str) -> str:
+    text = " ".join(str(category or "").strip().split())
+    parts = text.split(" - ")
+    if parts and parts[0].isdigit() and len(parts) > 1:
+        return " - ".join(parts[1:])
+    return text
+
+
+def extract_brand(product_name, company_brand) -> str:
+    words = str(product_name or "").strip().split()
+    if len(words) >= 2 and words[0].lower() == "laptop":
+        return normalize_brand(words[1])
+    return normalize_brand(company_brand)
+
+
+def read_input_file(path: Path) -> pd.DataFrame:
+    suffix = path.suffix.lower()
+    if suffix in {".xlsx", ".xlsm", ".xls"}:
+        return pd.read_excel(path)
+    if suffix == ".csv":
+        return pd.read_csv(path)
+    raise ValueError(f"Unsupported file type: {path.suffix}. Use .xlsx, .xls, .xlsm, or .csv")
+
+
+def validate_columns(df: pd.DataFrame) -> None:
+    missing = [col for col in REQUIRED_COLUMNS if col not in df.columns]
+    if missing:
+        raise ValueError(f"Missing required columns: {', '.join(missing)}")
+
+
+def prepare_stock(file_path: Path, stock_date) -> pd.DataFrame:
+    df = read_input_file(file_path)
+    validate_columns(df)
+
+    string_cols = df.select_dtypes(include=["object"]).columns
+    for col in string_cols:
+        df[col] = df[col].astype(str).str.strip()
+
+    df["main_category_clean"] = df["Main Category"].apply(strip_numeric_prefix)
+    df["sub_category_clean"] = df["Sub Category"].apply(strip_numeric_prefix)
+
+    laptop_mask = (
+        df["main_category_clean"].astype(str).str.contains("Laptop", case=False, na=False)
+        & df["sub_category_clean"].astype(str).str.contains("Laptop", case=False, na=False)
+    )
+    df = df[laptop_mask].copy()
+
+    df["id_store"] = pd.to_numeric(df["ID Store"], errors="coerce")
+    df["store_name"] = df["Store Name"].replace({"": "UNKNOWN STORE"}).fillna("UNKNOWN STORE")
+    df["quantity"] = pd.to_numeric(df["Quantity_1"], errors="coerce").fillna(0).round().astype(int)
+    df["brand"] = df.apply(lambda row: extract_brand(row["Product name"], row["COMPANYBRANDNAME"]), axis=1)
+    df["stock_date"] = stock_date
+    df = df.dropna(subset=["id_store"])
+    df["id_store"] = df["id_store"].astype(int)
+
+    df["new_stock"] = df.apply(
+        lambda row: int(row["quantity"]) if row["Inventory Status"] in NEW_STATUSES else 0,
+        axis=1,
+    )
+    df["demo_units"] = df.apply(
+        lambda row: int(row["quantity"]) if row["Inventory Status"] in DEMO_STATUSES else 0,
+        axis=1,
+    )
+
+    grouped = (
+        df.groupby(["stock_date", "id_store", "store_name", "brand"], as_index=False)
+        .agg(new_stock=("new_stock", "sum"), demo_units=("demo_units", "sum"))
+    )
+    grouped["stock_volume"] = grouped["new_stock"] + grouped["demo_units"]
+    return grouped
+
+
+def upsert_store(cur, id_store: int, store_name: str) -> int:
+    cur.execute(
+        """
+        INSERT INTO dim_store (id_store, store_name)
+        VALUES (%s, %s)
+        ON CONFLICT (id_store) DO UPDATE
+        SET store_name = EXCLUDED.store_name
+        RETURNING id
+        """,
+        (id_store, store_name),
+    )
+    return cur.fetchone()[0]
+
+
+def upsert_brand(cur, brand: str) -> int:
+    cur.execute(
+        """
+        INSERT INTO dim_brand (brand)
+        VALUES (%s)
+        ON CONFLICT (brand) DO UPDATE
+        SET brand = EXCLUDED.brand
+        RETURNING id
+        """,
+        (brand,),
+    )
+    return cur.fetchone()[0]
+
+
+def upsert_fact_stock(cur, row, uploaded_by: str) -> bool:
+    cur.execute(
+        """
+        INSERT INTO fact_stock (
+            stock_date, store_id, brand_id, new_stock,
+            demo_units, stock_volume, uploaded_by
+        )
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
+        ON CONFLICT (stock_date, store_id, brand_id) DO UPDATE
+        SET new_stock = EXCLUDED.new_stock,
+            demo_units = EXCLUDED.demo_units,
+            stock_volume = EXCLUDED.stock_volume,
+            uploaded_at = NOW(),
+            uploaded_by = EXCLUDED.uploaded_by
+        RETURNING (xmax = 0) AS inserted
+        """,
+        (
+            row["stock_date"],
+            row["store_id"],
+            row["brand_id"],
+            int(row["new_stock"]),
+            int(row["demo_units"]),
+            int(row["stock_volume"]),
+            uploaded_by,
+        ),
+    )
+    return bool(cur.fetchone()[0])
+
+
+def write_upload_log(
+    conn,
+    upload_type: str,
+    file_name: str,
+    upload_date,
+    uploaded_by: str,
+    rows_inserted: int,
+    rows_updated: int,
+    status: str,
+    error_message: str | None = None,
+) -> None:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO upload_log (
+                upload_type, file_name, upload_date, uploaded_by,
+                rows_inserted, rows_updated, status, error_message
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            """,
+            (
+                upload_type,
+                file_name,
+                upload_date,
+                uploaded_by,
+                rows_inserted,
+                rows_updated,
+                status,
+                error_message,
+            ),
+        )
+    conn.commit()
+
+
+def upload_stock(file_path: Path, uploaded_by: str, stock_date) -> tuple[int, int]:
+    grouped = prepare_stock(file_path, stock_date)
+    conn = get_connection()
+    inserted = 0
+    updated = 0
+
+    try:
+        with conn.cursor() as cur:
+            for _, row in grouped.iterrows():
+                store_id = upsert_store(cur, int(row["id_store"]), row["store_name"])
+                brand_id = upsert_brand(cur, row["brand"])
+                fact_row = row.to_dict()
+                fact_row["store_id"] = store_id
+                fact_row["brand_id"] = brand_id
+
+                if upsert_fact_stock(cur, fact_row, uploaded_by):
+                    inserted += 1
+                else:
+                    updated += 1
+
+        write_upload_log(
+            conn,
+            "stock",
+            file_path.name,
+            stock_date,
+            uploaded_by,
+            inserted,
+            updated,
+            "success",
+        )
+        return inserted, updated
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+def parse_date(value: str):
+    return datetime.strptime(value, "%Y-%m-%d").date()
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Upload LAPTOP stock snapshot into PostgreSQL.")
+    parser.add_argument("--file", required=True, help="Path to GeneralInventory Excel/CSV file")
+    parser.add_argument("--uploaded_by", required=True, help="Uploader name")
+    parser.add_argument("--date", required=True, help="Stock snapshot date, YYYY-MM-DD")
+    args = parser.parse_args()
+
+    file_path = Path(args.file).expanduser().resolve()
+    if not file_path.exists():
+        raise FileNotFoundError(f"File not found: {file_path}")
+    stock_date = parse_date(args.date)
+
+    try:
+        inserted, updated = upload_stock(file_path, args.uploaded_by, stock_date)
+        print(f"Stock upload completed. Inserted: {inserted}, Updated: {updated}")
+    except Exception as exc:
+        conn = get_connection()
+        try:
+            write_upload_log(
+                conn,
+                "stock",
+                file_path.name,
+                stock_date,
+                args.uploaded_by,
+                0,
+                0,
+                "failed",
+                str(exc),
+            )
+        finally:
+            conn.close()
+        raise
+
+
+if __name__ == "__main__":
+    main()

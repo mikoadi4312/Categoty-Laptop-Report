@@ -1,0 +1,15 @@
+[server]
+maxUploadSize = 2048
+maxMessageSize = 2048
+fileWatcherType = "none"
+runOnSave = false
+
+[browser]
+gatherUsageStats = false
+
+[theme]
+base = "light"
+primaryColor = "#0b2f66"
+backgroundColor = "#eaf4ff"
+secondaryBackgroundColor = "#ffffff"
+textColor = "#000000"
