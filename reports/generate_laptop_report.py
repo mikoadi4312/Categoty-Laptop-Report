@@ -160,7 +160,7 @@ def build_laptop_report_df(engine, target_date: date) -> pd.DataFrame:
     )[REPORT_COLUMNS]
 
     total = build_total_row(output, sales_date)
-    output = pd.concat([pd.DataFrame([total]), output, pd.DataFrame([total])], ignore_index=True)
+    output = pd.concat([output, pd.DataFrame([total])], ignore_index=True)
     return output
 
 
@@ -305,7 +305,7 @@ def write_laptop_report_sheet(wb: Workbook, df: pd.DataFrame, target_date: date)
             cell.fill = header_fill
             cell.alignment = Alignment(horizontal="center", vertical="center")
 
-    total_rows = [4, ws.max_row]
+    total_rows = [ws.max_row]
     for row_idx in total_rows:
         for col_idx in range(1, max_col + 1):
             cell = ws.cell(row_idx, col_idx)
