@@ -414,9 +414,34 @@ def setup_page() -> None:
                 color: #ffffff !important;
             }
 
-            div[data-testid="stDataFrame"] {
-                background: white;
+            .preview-table-wrap {
+                width: 100%;
+                overflow-x: auto;
+                background: #ffffff;
+                border: 1px solid var(--line);
                 border-radius: 8px;
+            }
+
+            .preview-table {
+                width: 100%;
+                min-width: 920px;
+                border-collapse: collapse;
+                color: #000000;
+                font-size: 13px;
+            }
+
+            .preview-table th,
+            .preview-table td {
+                border: 1px solid #e7edf4;
+                padding: 8px 10px;
+                text-align: left;
+                white-space: nowrap;
+            }
+
+            .preview-table th {
+                background: #eff4ff;
+                color: var(--navy);
+                font-weight: 850;
             }
 
             .status-card {
@@ -529,21 +554,6 @@ def default_report_date() -> date:
         return stock_date
     sales_date = latest_sales_date()
     return sales_date + timedelta(days=1)
-
-
-def app_header() -> None:
-    st.markdown(
-        """
-        <div class="topbar">
-            <div class="brand-lockup">
-                <span class="brand-mark">L</span>
-                <span>Category Laptop</span>
-            </div>
-            <div class="topbar-status">PostgreSQL based daily report</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
 
 
 def show_database_status() -> None:
@@ -715,7 +725,13 @@ def generated_data_panel(report_date: date) -> None:
         try:
             preview_df = preview_report_data(selected)
             st.markdown("**Preview: LAPTOP REPORT**")
-            st.dataframe(preview_df, use_container_width=True, hide_index=True)
+            preview_html = preview_df.fillna("").to_html(
+                index=False,
+                border=0,
+                classes="preview-table",
+                escape=True,
+            )
+            st.markdown(f'<div class="preview-table-wrap">{preview_html}</div>', unsafe_allow_html=True)
         except Exception as exc:
             st.warning(f"Preview not available: {exc}")
 
@@ -735,7 +751,6 @@ def upload_workflow_panel(uploaded_by: str, target_date: date) -> None:
 def main() -> None:
     init_dirs()
     setup_page()
-    app_header()
 
     st.write("")
     suggested_date = default_report_date()
