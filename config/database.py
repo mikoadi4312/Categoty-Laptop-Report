@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 from urllib.parse import quote_plus
 
 import psycopg2
@@ -7,6 +8,11 @@ from sqlalchemy import create_engine
 
 
 load_dotenv()
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+SCHEMA_PATH = PROJECT_ROOT / "models" / "schema.sql"
+_schema_initialized = False
 
 
 def _secret(name: str, default: str | None = None) -> str | None:
@@ -71,3 +77,22 @@ def get_engine():
     dbname = cfg["dbname"]
     url = f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{dbname}"
     return create_engine(url, future=True)
+
+
+def ensure_schema() -> None:
+    global _schema_initialized
+    if _schema_initialized:
+        return
+
+    schema_sql = SCHEMA_PATH.read_text(encoding="utf-8")
+    conn = get_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(schema_sql)
+        conn.commit()
+        _schema_initialized = True
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()

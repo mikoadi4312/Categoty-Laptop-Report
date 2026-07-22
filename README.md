@@ -113,6 +113,17 @@ DB_PASSWORD = "your-db-password"
 
 After changing secrets, reboot the Streamlit app from the app menu.
 
+## Railway Deployment
+
+For faster uploads, deploy the Streamlit service and PostgreSQL database in the same Railway project and region.
+
+1. Create a Railway project from this GitHub repository.
+2. Add a PostgreSQL service to the project.
+3. Add `DATABASE_URL=${{Postgres.DATABASE_URL}}` to the Streamlit service variables.
+4. Deploy the Streamlit service. The included `Procfile` starts the app using Railway's `PORT` value.
+
+The application creates the required tables and indexes automatically when it connects to an empty database.
+
 ### Web Upload
 
 Start the web app:

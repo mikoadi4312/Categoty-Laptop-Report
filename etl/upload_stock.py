@@ -4,6 +4,7 @@ from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
+from psycopg2.extras import execute_values
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -59,13 +60,6 @@ def strip_numeric_prefix(category: str) -> str:
     return text
 
 
-def extract_brand(product_name, company_brand) -> str:
-    words = str(product_name or "").strip().split()
-    if len(words) >= 2 and words[0].lower() == "laptop":
-        return normalize_brand(words[1])
-    return normalize_brand(company_brand)
-
-
 def read_input_file(path: Path) -> pd.DataFrame:
     suffix = path.suffix.lower()
     if suffix in {".xlsx", ".xlsm", ".xls"}:
@@ -101,64 +95,101 @@ def prepare_stock(file_path: Path, stock_date) -> pd.DataFrame:
     df["id_store"] = pd.to_numeric(df["ID Store"], errors="coerce")
     df["store_name"] = df["Store Name"].replace({"": "UNKNOWN STORE"}).fillna("UNKNOWN STORE")
     df["quantity"] = pd.to_numeric(df["Quantity_1"], errors="coerce").fillna(0).round().astype(int)
-    df["brand"] = df.apply(lambda row: extract_brand(row["Product name"], row["COMPANYBRANDNAME"]), axis=1)
+    product_brand = df["Product name"].astype(str).str.extract(r"(?i)^Laptop\s+(\S+)", expand=False)
+    df["brand"] = product_brand.fillna(df["COMPANYBRANDNAME"]).apply(normalize_brand)
     df["stock_date"] = stock_date
     df = df.dropna(subset=["id_store"])
     df["id_store"] = df["id_store"].astype(int)
 
-    df["new_stock"] = df.apply(
-        lambda row: int(row["quantity"]) if row["Inventory Status"] in NEW_STATUSES else 0,
-        axis=1,
-    )
-    df["demo_units"] = df.apply(
-        lambda row: int(row["quantity"]) if row["Inventory Status"] in DEMO_STATUSES else 0,
-        axis=1,
-    )
+    df["new_stock"] = df["quantity"].where(df["Inventory Status"].isin(NEW_STATUSES), 0).astype(int)
+    df["demo_units"] = df["quantity"].where(df["Inventory Status"].isin(DEMO_STATUSES), 0).astype(int)
 
     grouped = (
-        df.groupby(["stock_date", "id_store", "store_name", "brand"], as_index=False)
-        .agg(new_stock=("new_stock", "sum"), demo_units=("demo_units", "sum"))
+        df.groupby(["stock_date", "id_store", "brand"], as_index=False)
+        .agg(
+            store_name=("store_name", "last"),
+            new_stock=("new_stock", "sum"),
+            demo_units=("demo_units", "sum"),
+        )
     )
     grouped["stock_volume"] = grouped["new_stock"] + grouped["demo_units"]
     return grouped
 
 
-def upsert_store(cur, id_store: int, store_name: str) -> int:
-    cur.execute(
+def upsert_stores(cur, grouped: pd.DataFrame) -> dict[int, int]:
+    stores = [
+        (int(id_store), str(store_name))
+        for id_store, store_name in grouped[["id_store", "store_name"]]
+        .drop_duplicates(subset=["id_store"], keep="last")
+        .itertuples(index=False, name=None)
+    ]
+    if not stores:
+        return {}
+    rows = execute_values(
+        cur,
         """
         INSERT INTO dim_store (id_store, store_name)
-        VALUES (%s, %s)
+        VALUES %s
         ON CONFLICT (id_store) DO UPDATE
         SET store_name = EXCLUDED.store_name
-        RETURNING id
+        RETURNING id_store, id
         """,
-        (id_store, store_name),
+        stores,
+        page_size=len(stores),
+        fetch=True,
     )
-    return cur.fetchone()[0]
+    return {int(id_store): int(database_id) for id_store, database_id in rows}
 
 
-def upsert_brand(cur, brand: str) -> int:
-    cur.execute(
+def upsert_brands(cur, grouped: pd.DataFrame) -> dict[str, int]:
+    brands = [(str(brand),) for brand in grouped["brand"].drop_duplicates().tolist()]
+    if not brands:
+        return {}
+    rows = execute_values(
+        cur,
         """
         INSERT INTO dim_brand (brand)
-        VALUES (%s)
+        VALUES %s
         ON CONFLICT (brand) DO UPDATE
         SET brand = EXCLUDED.brand
-        RETURNING id
+        RETURNING brand, id
         """,
-        (brand,),
+        brands,
+        page_size=len(brands),
+        fetch=True,
     )
-    return cur.fetchone()[0]
+    return {str(brand): int(database_id) for brand, database_id in rows}
 
 
-def upsert_fact_stock(cur, row, uploaded_by: str) -> bool:
-    cur.execute(
+def upsert_fact_stock(
+    cur,
+    grouped: pd.DataFrame,
+    store_ids: dict[int, int],
+    brand_ids: dict[str, int],
+    uploaded_by: str,
+) -> tuple[int, int]:
+    values = [
+        (
+            row.stock_date,
+            store_ids[int(row.id_store)],
+            brand_ids[row.brand],
+            int(row.new_stock),
+            int(row.demo_units),
+            int(row.stock_volume),
+            uploaded_by,
+        )
+        for row in grouped.itertuples(index=False)
+    ]
+    if not values:
+        return 0, 0
+    results = execute_values(
+        cur,
         """
         INSERT INTO fact_stock (
             stock_date, store_id, brand_id, new_stock,
             demo_units, stock_volume, uploaded_by
         )
-        VALUES (%s, %s, %s, %s, %s, %s, %s)
+        VALUES %s
         ON CONFLICT (stock_date, store_id, brand_id) DO UPDATE
         SET new_stock = EXCLUDED.new_stock,
             demo_units = EXCLUDED.demo_units,
@@ -167,17 +198,12 @@ def upsert_fact_stock(cur, row, uploaded_by: str) -> bool:
             uploaded_by = EXCLUDED.uploaded_by
         RETURNING (xmax = 0) AS inserted
         """,
-        (
-            row["stock_date"],
-            row["store_id"],
-            row["brand_id"],
-            int(row["new_stock"]),
-            int(row["demo_units"]),
-            int(row["stock_volume"]),
-            uploaded_by,
-        ),
+        values,
+        page_size=len(values),
+        fetch=True,
     )
-    return bool(cur.fetchone()[0])
+    inserted = sum(bool(row[0]) for row in results)
+    return inserted, len(results) - inserted
 
 
 def write_upload_log(
@@ -222,17 +248,9 @@ def upload_stock(file_path: Path, uploaded_by: str, stock_date) -> tuple[int, in
 
     try:
         with conn.cursor() as cur:
-            for _, row in grouped.iterrows():
-                store_id = upsert_store(cur, int(row["id_store"]), row["store_name"])
-                brand_id = upsert_brand(cur, row["brand"])
-                fact_row = row.to_dict()
-                fact_row["store_id"] = store_id
-                fact_row["brand_id"] = brand_id
-
-                if upsert_fact_stock(cur, fact_row, uploaded_by):
-                    inserted += 1
-                else:
-                    updated += 1
+            store_ids = upsert_stores(cur, grouped)
+            brand_ids = upsert_brands(cur, grouped)
+            inserted, updated = upsert_fact_stock(cur, grouped, store_ids, brand_ids, uploaded_by)
 
         write_upload_log(
             conn,

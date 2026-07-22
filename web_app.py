@@ -12,7 +12,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from config.database import get_connection  # noqa: E402
+from config.database import ensure_schema, get_connection  # noqa: E402
 from etl.upload_sales import upload_sales  # noqa: E402
 from etl.upload_stock import upload_stock  # noqa: E402
 from reports.generate_laptop_report import generate_report  # noqa: E402
@@ -782,6 +782,7 @@ def save_uploaded_file(uploaded_file, prefix: str) -> Path:
 
 def db_status() -> tuple[bool, str]:
     try:
+        ensure_schema()
         conn = get_connection()
         try:
             with conn.cursor() as cur:
