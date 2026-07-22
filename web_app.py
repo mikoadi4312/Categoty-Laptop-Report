@@ -1,5 +1,6 @@
 import sys
 from datetime import date, datetime, timedelta
+from numbers import Number
 from pathlib import Path
 
 import pandas as pd
@@ -416,10 +417,13 @@ def setup_page() -> None:
 
             .preview-table-wrap {
                 width: 100%;
+                max-height: 520px;
                 overflow-x: auto;
+                overflow-y: auto;
                 background: #ffffff;
                 border: 1px solid var(--line);
                 border-radius: 8px;
+                box-shadow: 0 10px 28px rgba(11, 47, 102, 0.06);
             }
 
             .preview-table {
@@ -434,7 +438,6 @@ def setup_page() -> None:
             .preview-table td {
                 border: 1px solid #e7edf4;
                 padding: 8px 10px;
-                text-align: left;
                 white-space: nowrap;
             }
 
@@ -442,6 +445,34 @@ def setup_page() -> None:
                 background: #eff4ff;
                 color: var(--navy);
                 font-weight: 850;
+                position: sticky;
+                top: 0;
+                z-index: 1;
+                text-align: center;
+                box-shadow: inset 0 -1px 0 var(--line);
+            }
+
+            .preview-table td {
+                text-align: right;
+            }
+
+            .preview-table th:first-child,
+            .preview-table td:first-child {
+                text-align: left;
+                font-weight: 750;
+            }
+
+            .preview-table tbody tr:nth-child(even) {
+                background: #f4f9ff;
+            }
+
+            .preview-table tbody tr:last-child {
+                background: #dcecff;
+                font-weight: 900;
+            }
+
+            .preview-table tbody tr:hover {
+                background: #eaf4ff;
             }
 
             .status-card {
@@ -481,7 +512,249 @@ def setup_page() -> None:
                     min-height: 240px;
                 }
             }
+
+            /* Laptop report shell, matched to the localhost:5173 reference app. */
+            :root {
+                --shell-page: #f1f5f9;
+                --shell-card: #ffffff;
+                --shell-blue: #2563eb;
+                --shell-blue-hover: #1d4ed8;
+                --shell-text: #1e293b;
+                --shell-muted: #64748b;
+                --shell-line: #e2e8f0;
+            }
+
+            header[data-testid="stHeader"],
+            div[data-testid="stToolbar"],
+            #MainMenu,
+            footer {
+                display: none !important;
+            }
+
+            .stApp {
+                background: var(--shell-page) !important;
+                color: var(--shell-text);
+            }
+
+            .block-container {
+                max-width: none;
+                padding: 6.25rem 2rem 2rem 2rem !important;
+            }
+
+            .app-header {
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                z-index: 999;
+                background: #ffffff;
+                border-bottom: 1px solid #e2e8f0;
+                min-height: 4.75rem;
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                padding: 1rem 1.5rem;
+            }
+
+            .app-header h1 {
+                margin: 0;
+                color: #1e293b;
+                font-size: 1.25rem;
+                line-height: 1.2;
+                font-weight: 800;
+                letter-spacing: 0;
+            }
+
+            .app-header-meta {
+                display: flex;
+                align-items: center;
+                gap: 0.5rem;
+                color: #64748b;
+                font-size: 0.8rem;
+                font-weight: 700;
+            }
+
+            .app-header-pill {
+                padding: 0.38rem 0.72rem;
+                border-radius: 999px;
+                background: #f1f5f9;
+                color: #475569;
+                border: 1px solid #e2e8f0;
+            }
+
+            .button-label-spacer {
+                height: 1.72rem;
+            }
+
+            div[data-testid="stVerticalBlockBorderWrapper"] {
+                background: #ffffff;
+                border: 1px solid #e2e8f0 !important;
+                border-radius: 0.75rem !important;
+                box-shadow: 0 10px 22px rgba(15, 23, 42, 0.08);
+            }
+
+            div[data-testid="stMetric"] {
+                border-color: #e2e8f0 !important;
+                border-radius: 0.75rem !important;
+                box-shadow: 0 10px 22px rgba(15, 23, 42, 0.07) !important;
+            }
+
+            div[data-testid="stMetric"] label,
+            div[data-testid="stMetric"] [data-testid="stMetricLabel"] {
+                color: #64748b !important;
+                font-weight: 700;
+            }
+
+            div[data-testid="stMetric"] [data-testid="stMetricValue"] {
+                color: #1e293b !important;
+                font-size: 1.35rem !important;
+                font-weight: 850;
+            }
+
+            .section-title,
+            .panel-title {
+                color: #475569 !important;
+                font-weight: 800;
+            }
+
+            .panel-subtitle,
+            .stCaptionContainer,
+            .stMarkdown p {
+                color: #64748b;
+            }
+
+            div[data-baseweb="input"],
+            div[data-baseweb="select"],
+            div[data-testid="stDateInput"] div,
+            div[data-testid="stTextInput"] div {
+                border-color: #cbd5e1 !important;
+                border-radius: 0.5rem !important;
+                background: #ffffff !important;
+                color: #1e293b !important;
+            }
+
+            div[data-testid="stTextInput"] input,
+            div[data-testid="stDateInput"] input {
+                color: #1e293b !important;
+                -webkit-text-fill-color: #1e293b !important;
+            }
+
+            div[data-testid="stTextInput"] label,
+            div[data-testid="stDateInput"] label,
+            div[data-testid="stSelectbox"] label,
+            div[data-testid="stFileUploader"] label {
+                color: #475569 !important;
+                font-weight: 750 !important;
+            }
+
+            .stButton button,
+            .stDownloadButton button {
+                border-radius: 0.5rem !important;
+                min-height: 2.75rem !important;
+                border-color: var(--shell-blue) !important;
+                font-weight: 800 !important;
+                transition: all 0.18s ease;
+            }
+
+            .stButton button[kind="primary"],
+            .stDownloadButton button {
+                background: var(--shell-blue) !important;
+                color: #ffffff !important;
+                box-shadow: 0 10px 20px rgba(37, 99, 235, 0.22) !important;
+            }
+
+            .stButton button[kind="primary"]:hover,
+            .stDownloadButton button:hover {
+                background: var(--shell-blue-hover) !important;
+                border-color: var(--shell-blue-hover) !important;
+                transform: translateY(-1px);
+            }
+
+            div[data-testid="stFileUploader"] section {
+                border: 2px dashed #cbd5e1 !important;
+                border-radius: 0.75rem !important;
+                background: #ffffff !important;
+                min-height: 132px;
+                transition: all 0.22s ease;
+            }
+
+            div[data-testid="stFileUploader"] section:hover {
+                border-color: #60a5fa !important;
+                background: #eff6ff !important;
+            }
+
+            div[data-testid="stFileUploader"] button,
+            button[data-testid="stBaseButton-secondary"] {
+                border-radius: 0.5rem !important;
+                background: #2563eb !important;
+                border-color: #2563eb !important;
+                color: #ffffff !important;
+            }
+
+            .preview-table-wrap {
+                border-color: #e2e8f0 !important;
+                border-radius: 0.75rem !important;
+                box-shadow: 0 10px 22px rgba(15, 23, 42, 0.08) !important;
+            }
+
+            .preview-table {
+                color: #1e293b !important;
+            }
+
+            .preview-table th {
+                background: #f8fafc !important;
+                color: #475569 !important;
+                border-color: #e2e8f0 !important;
+            }
+
+            .preview-table td {
+                border-color: #e2e8f0 !important;
+            }
+
+            .preview-table tbody tr:nth-child(even) {
+                background: #f8fafc !important;
+            }
+
+            .preview-table tbody tr:last-child {
+                background: #eff6ff !important;
+                color: #1d4ed8;
+            }
+
+            .status-card {
+                border-color: #e2e8f0 !important;
+                border-radius: 0.75rem !important;
+                background: #ffffff !important;
+                box-shadow: 0 10px 22px rgba(15, 23, 42, 0.06);
+                color: #64748b;
+            }
+
+            @media (max-width: 980px) {
+                .app-header {
+                    left: 0;
+                    top: auto;
+                    position: sticky;
+                }
+
+                .block-container {
+                    padding: 1rem !important;
+                }
+            }
         </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_app_chrome() -> None:
+    st.markdown(
+        """
+        <header class="app-header">
+            <h1>Laptop Category Report</h1>
+            <div class="app-header-meta">
+                <span class="app-header-pill">LAPTOP</span>
+                <span class="app-header-pill">Local App</span>
+            </div>
+        </header>
         """,
         unsafe_allow_html=True,
     )
@@ -649,15 +922,40 @@ def generated_report_files() -> list[Path]:
     return sorted(REPORT_DIR.glob("*.xlsx"), key=lambda path: path.stat().st_mtime, reverse=True)
 
 
-def preview_report_data(path: Path, max_rows: int = 18) -> pd.DataFrame:
+def preview_report_data(path: Path, sheet_name: str, max_rows: int | None = None) -> pd.DataFrame:
     wb = load_workbook(path, data_only=True, read_only=True)
     try:
-        ws = wb["LAPTOP REPORT"] if "LAPTOP REPORT" in wb.sheetnames else wb[wb.sheetnames[0]]
-        headers = [ws.cell(3, col).value for col in range(1, ws.max_column + 1)]
-        headers = [header if header else f"Column {idx}" for idx, header in enumerate(headers, start=1)]
+        if sheet_name not in wb.sheetnames:
+            raise ValueError(f"Sheet {sheet_name} tidak ditemukan.")
+
+        ws = wb[sheet_name]
+        sheet_rows = ws.iter_rows(values_only=True)
+        next(sheet_rows, ())
+        group_row = next(sheet_rows, ())
+        header_row = next(sheet_rows, ())
+        if sheet_name == "SHOP LEVEL":
+            headers = []
+            current_group = ""
+            for col, subheader in enumerate(header_row, start=1):
+                group = group_row[col - 1] if col <= len(group_row) else None
+                if group:
+                    current_group = str(group).strip()
+                if col == 1:
+                    header = subheader or "STORE NAME"
+                else:
+                    header = f"{current_group} {subheader or ''}".strip()
+                headers.append(header or f"Column {col}")
+        else:
+            headers = list(header_row)
+            headers = [header if header else f"Column {idx}" for idx, header in enumerate(headers, start=1)]
+
         rows = []
-        for row_idx in range(4, min(ws.max_row, max_rows + 3) + 1):
-            row = [ws.cell(row_idx, col).value for col in range(1, len(headers) + 1)]
+        for row_idx, values in enumerate(sheet_rows):
+            if max_rows is not None and row_idx >= max_rows:
+                break
+            row = list(values[:len(headers)])
+            if len(row) < len(headers):
+                row.extend([None] * (len(headers) - len(row)))
             if any(value is not None for value in row):
                 rows.append(row)
         return pd.DataFrame(rows, columns=headers)
@@ -665,27 +963,83 @@ def preview_report_data(path: Path, max_rows: int = 18) -> pd.DataFrame:
         wb.close()
 
 
-def generated_data_panel(report_date: date) -> None:
+def coerce_preview_number(value: object) -> float | None:
+    if value is None or pd.isna(value):
+        return None
+    if isinstance(value, Number) and not isinstance(value, bool):
+        return float(value)
+    if isinstance(value, str):
+        cleaned = value.strip()
+        if not cleaned:
+            return None
+        normalized = cleaned.replace(".", "").replace(",", ".") if "," in cleaned else cleaned.replace(",", "")
+        try:
+            return float(normalized)
+        except ValueError:
+            return None
+    return None
+
+
+def format_id_number(value: object) -> str:
+    number = coerce_preview_number(value)
+    if number is None:
+        return "" if value is None or pd.isna(value) else str(value)
+    return f"{number:,.0f}".replace(",", ".")
+
+
+def format_preview_report_data(df: pd.DataFrame) -> pd.DataFrame:
+    formatted = df.copy()
+    for column in formatted.columns:
+        column_name = str(column).upper()
+        if column_name == "GROWTH RATE":
+            formatted[column] = formatted[column].apply(
+                lambda value: "" if coerce_preview_number(value) is None else f"{coerce_preview_number(value) * 100:.2f}%".replace(".", ",")
+            )
+        elif column_name not in {"BRAND", "STORE NAME"}:
+            formatted[column] = formatted[column].apply(format_id_number)
+        else:
+            formatted[column] = formatted[column].fillna("")
+    return formatted
+
+
+def render_report_preview(path: Path, sheet_name: str) -> None:
+    preview_df = preview_report_data(path, sheet_name)
+    preview_df = format_preview_report_data(preview_df)
+    preview_html = preview_df.to_html(
+        index=False,
+        border=0,
+        classes="preview-table",
+        escape=True,
+    )
+    st.markdown(f'<div class="preview-table-wrap">{preview_html}</div>', unsafe_allow_html=True)
+
+
+def generated_data_panel(default_sales_date: date) -> None:
     st.markdown('<div class="section-title">Generated Data</div>', unsafe_allow_html=True)
-    output_name = f"LAPTOP_REPORT_{report_date:%Y%m%d}.xlsx"
-    output_path = REPORT_DIR / output_name
 
     with st.container(border=True):
-        top_left, top_right = st.columns([1.3, 1])
+        top_left, date_col, action_col = st.columns([1.25, 0.85, 0.9])
         with top_left:
             st.markdown("**Laptop report output**")
-            st.caption(f"Report date: {report_date:%Y-%m-%d} | Sales H-1: {(report_date - timedelta(days=1)):%Y-%m-%d}")
-        with top_right:
+            st.caption("Generate report based on the selected sales date.")
+        with date_col:
+            report_date = st.date_input("Sales date", value=default_sales_date, format="YYYY-MM-DD")
+        with action_col:
+            st.markdown('<div class="button-label-spacer"></div>', unsafe_allow_html=True)
             generate_clicked = st.button("Generate Excel", type="primary", use_container_width=True)
+
+        output_name = f"LAPTOP_REPORT_{report_date:%Y%m%d}.xlsx"
+        output_path = REPORT_DIR / output_name
+        status_message: tuple[str, str] | None = None
 
         if generate_clicked:
             with st.spinner("Generating Excel report..."):
                 try:
                     generate_report(report_date, output_path)
                     st.session_state["latest_report"] = str(output_path)
-                    st.success(f"Report generated: {output_name}")
+                    status_message = ("success", f"Report generated: {output_name}")
                 except Exception as exc:
-                    st.error(f"Report generation failed: {exc}")
+                    status_message = ("error", f"Report generation failed: {exc}")
 
         files = generated_report_files()
         if not files:
@@ -696,22 +1050,14 @@ def generated_data_panel(report_date: date) -> None:
             return
 
         latest_session = st.session_state.get("latest_report")
-        default_index = 0
+        selected = files[0]
         if latest_session:
-            for idx, file_path in enumerate(files):
-                if str(file_path) == latest_session:
-                    default_index = idx
-                    break
+            session_path = Path(latest_session)
+            if session_path.exists():
+                selected = session_path
 
-        selected = st.selectbox(
-            "Generated reports",
-            files,
-            index=default_index,
-            format_func=lambda path: f"{path.name} ({datetime.fromtimestamp(path.stat().st_mtime):%Y-%m-%d %H:%M})",
-        )
-
-        download_left, download_right = st.columns([1, 1])
-        with download_left:
+        _, _, download_col = st.columns([1.25, 0.85, 0.9])
+        with download_col:
             st.download_button(
                 label="Download Excel",
                 data=selected.read_bytes(),
@@ -719,21 +1065,25 @@ def generated_data_panel(report_date: date) -> None:
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 use_container_width=True,
             )
-        with download_right:
-            st.metric("File Size", f"{selected.stat().st_size / 1024:.1f} KB")
 
-        try:
-            preview_df = preview_report_data(selected)
-            st.markdown("**Preview: LAPTOP REPORT**")
-            preview_html = preview_df.fillna("").to_html(
-                index=False,
-                border=0,
-                classes="preview-table",
-                escape=True,
-            )
-            st.markdown(f'<div class="preview-table-wrap">{preview_html}</div>', unsafe_allow_html=True)
-        except Exception as exc:
-            st.warning(f"Preview not available: {exc}")
+        if status_message:
+            level, message = status_message
+            if level == "success":
+                st.success(message)
+            else:
+                st.error(message)
+
+        laptop_tab, shop_tab = st.tabs(["Laptop Report", "Shop Level"])
+        with laptop_tab:
+            try:
+                render_report_preview(selected, "LAPTOP REPORT")
+            except Exception as exc:
+                st.warning(f"Preview Laptop Report tidak tersedia: {exc}")
+        with shop_tab:
+            try:
+                render_report_preview(selected, "SHOP LEVEL")
+            except Exception as exc:
+                st.warning(f"Preview Shop Level tidak tersedia: {exc}")
 
 
 def upload_workflow_panel(uploaded_by: str, target_date: date) -> None:
@@ -751,24 +1101,21 @@ def upload_workflow_panel(uploaded_by: str, target_date: date) -> None:
 def main() -> None:
     init_dirs()
     setup_page()
+    render_app_chrome()
 
-    st.write("")
     suggested_date = default_report_date()
+    default_sales_date = latest_sales_date()
+    uploaded_by = "Yusuf"
+    target_date = suggested_date
+
     show_database_status()
     st.write("")
-
-    left, right = st.columns([1, 1])
-    with left:
-        uploaded_by = st.text_input("Uploaded by", value="Yusuf")
-    with right:
-        target_date = st.date_input("Report / stock date", value=suggested_date, format="YYYY-MM-DD")
-        st.caption(f"Revenue uses H-1 sales date: {(target_date - timedelta(days=1)):%Y-%m-%d}")
 
     upload_col, generated_col = st.columns([0.78, 1.62], gap="large")
     with upload_col:
         upload_workflow_panel(uploaded_by, target_date)
     with generated_col:
-        generated_data_panel(target_date)
+        generated_data_panel(default_sales_date)
 
 
 if __name__ == "__main__":

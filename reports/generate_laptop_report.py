@@ -1,6 +1,7 @@
 import argparse
 import sys
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from pathlib import Path
 
 import pandas as pd
@@ -31,8 +32,61 @@ REPORT_COLUMNS = [
     "GROWTH RATE",
 ]
 
-THIN_SIDE = Side(style="thin", color="808080")
+THEME_NAVY = "0B2F66"
+THEME_BLUE = "2F6FED"
+THEME_BLUE_DARK = "123F84"
+THEME_SOFT = "F4F9FF"
+THEME_LINE = "CFE0F5"
+THEME_HEADER = "EFF4FF"
+THEME_TOTAL = "DCEBFF"
+THEME_GREEN = "0F8F5F"
+THEME_INK = "000000"
+THEME_MUTED = "475569"
+
+THIN_SIDE = Side(style="thin", color=THEME_LINE)
 THIN_BORDER = Border(left=THIN_SIDE, right=THIN_SIDE, top=THIN_SIDE, bottom=THIN_SIDE)
+MEDIUM_BOTTOM_BORDER = Border(
+    left=THIN_SIDE,
+    right=THIN_SIDE,
+    top=THIN_SIDE,
+    bottom=Side(style="medium", color=THEME_NAVY),
+)
+
+
+def report_font(
+    *,
+    bold: bool = False,
+    color: str = THEME_INK,
+    size: int = 10,
+) -> Font:
+    return Font(name="Calibri", bold=bold, color=color, size=size)
+
+
+def set_print_layout(ws, max_col: int) -> None:
+    ws.sheet_view.showGridLines = False
+    ws.page_setup.orientation = "landscape"
+    ws.page_setup.fitToWidth = 1
+    ws.page_setup.fitToHeight = 0
+    ws.sheet_properties.pageSetUpPr.fitToPage = True
+    ws.print_title_rows = "1:3"
+    ws.auto_filter.ref = f"A3:{get_column_letter(max_col)}{ws.max_row}"
+
+
+def style_cell(
+    cell,
+    *,
+    fill: str | None = None,
+    font: Font | None = None,
+    align: Alignment | None = None,
+    border: Border = THIN_BORDER,
+) -> None:
+    if fill:
+        cell.fill = PatternFill("solid", fgColor=fill)
+    if font:
+        cell.font = font
+    if align:
+        cell.alignment = align
+    cell.border = border
 
 
 def parse_date(value: str | None) -> date:
@@ -47,6 +101,15 @@ def money(value) -> float:
     return float(value)
 
 
+def rounded_integer(value):
+    if value is None or pd.isna(value) or isinstance(value, bool):
+        return value
+    try:
+        return int(Decimal(str(value)).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+    except (InvalidOperation, TypeError, ValueError):
+        return value
+
+
 def query_dataframe(engine, sql: str, target_date: date, sales_date: date | None = None) -> pd.DataFrame:
     params = {"target_date": target_date, "sales_date": sales_date or target_date}
     with engine.connect() as conn:
@@ -54,7 +117,7 @@ def query_dataframe(engine, sql: str, target_date: date, sales_date: date | None
 
 
 def build_laptop_report_df(engine, target_date: date) -> pd.DataFrame:
-    sales_date = target_date - timedelta(days=1)
+    sales_date = target_date
     day_sql = """
         SELECT b.brand, SUM(s.day_qty) AS day_qty, SUM(s.day_revenue) AS day_rev
         FROM fact_sales s
@@ -193,7 +256,7 @@ def build_total_row(df: pd.DataFrame, target_date: date) -> dict:
 
 
 def build_shop_level_df(engine, target_date: date) -> tuple[pd.DataFrame, list[str]]:
-    sales_date = target_date - timedelta(days=1)
+    sales_date = target_date
     day_sql = """
         SELECT st.id_store, st.store_name, b.brand,
                SUM(s.day_qty) AS day_qty, SUM(s.day_revenue) AS day_revenue
@@ -276,8 +339,9 @@ def write_laptop_report_sheet(wb: Workbook, df: pd.DataFrame, target_date: date)
     max_col = len(REPORT_COLUMNS)
     ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=max_col)
     ws.cell(1, 1, f"LAPTOP CATEGORY DAILY REPORT - {target_date:%Y-%m-%d}")
-    ws.cell(1, 1).font = Font(bold=True, size=14)
-    ws.cell(1, 1).alignment = Alignment(horizontal="center", vertical="center")
+    ws.row_dimensions[1].height = 30
+    ws.row_dimensions[2].height = 24
+    ws.row_dimensions[3].height = 28
 
     ws.cell(2, 1, "")
     ws.merge_cells("B2:C2")
@@ -296,40 +360,82 @@ def write_laptop_report_sheet(wb: Workbook, df: pd.DataFrame, target_date: date)
         for col_idx, value in enumerate(row, start=1):
             ws.cell(row_idx, col_idx, value)
 
-    header_fill = PatternFill("solid", fgColor="D9EAF7")
-    gold_fill = PatternFill("solid", fgColor="FFD700")
+    for col_idx in range(1, max_col + 1):
+        style_cell(
+            ws.cell(1, col_idx),
+            fill=THEME_NAVY,
+            font=report_font(bold=True, color="FFFFFF", size=15),
+            align=Alignment(horizontal="center", vertical="center"),
+            border=MEDIUM_BOTTOM_BORDER,
+        )
+
+    group_colors = {
+        1: THEME_NAVY,
+        2: THEME_BLUE,
+        3: THEME_BLUE,
+        4: THEME_BLUE_DARK,
+        5: THEME_BLUE_DARK,
+        6: THEME_MUTED,
+        7: THEME_MUTED,
+        8: THEME_GREEN,
+        9: THEME_GREEN,
+        10: THEME_GREEN,
+        11: THEME_GREEN,
+    }
     for row_idx in [2, 3]:
         for col_idx in range(1, max_col + 1):
             cell = ws.cell(row_idx, col_idx)
-            cell.font = Font(bold=True)
-            cell.fill = header_fill
-            cell.alignment = Alignment(horizontal="center", vertical="center")
+            if row_idx == 2:
+                style_cell(
+                    cell,
+                    fill=group_colors[col_idx],
+                    font=report_font(bold=True, color="FFFFFF", size=10),
+                    align=Alignment(horizontal="center", vertical="center"),
+                    border=MEDIUM_BOTTOM_BORDER,
+                )
+            else:
+                style_cell(
+                    cell,
+                    fill=THEME_HEADER,
+                    font=report_font(bold=True, color=THEME_NAVY, size=10),
+                    align=Alignment(horizontal="center", vertical="center", wrap_text=True),
+                    border=MEDIUM_BOTTOM_BORDER,
+                )
 
-    total_rows = [ws.max_row]
-    for row_idx in total_rows:
+    for row_idx in range(4, ws.max_row + 1):
+        is_total_row = ws.cell(row_idx, 1).value == "GRAND TOTAL"
+        fill = THEME_TOTAL if is_total_row else (THEME_SOFT if row_idx % 2 == 0 else "FFFFFF")
         for col_idx in range(1, max_col + 1):
             cell = ws.cell(row_idx, col_idx)
-            cell.font = Font(bold=True)
-            cell.fill = gold_fill
-
-    for row in ws.iter_rows(min_row=1, max_row=ws.max_row, min_col=1, max_col=max_col):
-        for cell in row:
-            cell.border = THIN_BORDER
-            cell.alignment = Alignment(horizontal="center" if cell.column > 1 else "left", vertical="center")
+            style_cell(
+                cell,
+                fill=fill,
+                font=report_font(bold=is_total_row, color=THEME_INK, size=10),
+                align=Alignment(
+                    horizontal="left" if col_idx == 1 else "right",
+                    vertical="center",
+                    wrap_text=(col_idx == 1),
+                ),
+                border=MEDIUM_BOTTOM_BORDER if is_total_row else THIN_BORDER,
+            )
+        ws.row_dimensions[row_idx].height = 22
 
     for col_idx in [2, 4, 6, 8, 9, 10]:
         for row_idx in range(4, ws.max_row + 1):
             ws.cell(row_idx, col_idx).number_format = "#,##0"
     for col_idx in [3, 5, 7]:
         for row_idx in range(4, ws.max_row + 1):
-            ws.cell(row_idx, col_idx).number_format = "#,##0.00"
+            cell = ws.cell(row_idx, col_idx)
+            cell.value = rounded_integer(cell.value)
+            cell.number_format = "#,##0"
     for row_idx in range(4, ws.max_row + 1):
         ws.cell(row_idx, 11).number_format = "0.00%"
 
-    ws.column_dimensions["A"].width = 25
+    ws.column_dimensions["A"].width = 28
     for col_idx in range(2, max_col + 1):
-        ws.column_dimensions[get_column_letter(col_idx)].width = 16
+        ws.column_dimensions[get_column_letter(col_idx)].width = 17
     ws.freeze_panes = "A4"
+    set_print_layout(ws, max_col)
 
 
 def write_shop_level_sheet(wb: Workbook, df: pd.DataFrame, brands: list[str], target_date: date) -> None:
@@ -338,6 +444,9 @@ def write_shop_level_sheet(wb: Workbook, df: pd.DataFrame, brands: list[str], ta
 
     ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=max_col)
     ws.cell(1, 1, f"LAPTOP SHOP LEVEL REPORT - {target_date:%Y-%m-%d}")
+    ws.row_dimensions[1].height = 30
+    ws.row_dimensions[2].height = 26
+    ws.row_dimensions[3].height = 28
 
     ws.cell(2, 1, "SHOP")
     start_col = 2
@@ -365,62 +474,83 @@ def write_shop_level_sheet(wb: Workbook, df: pd.DataFrame, brands: list[str], ta
         for cell_idx, value in enumerate(row, start=1):
             ws.cell(row_idx, cell_idx, value)
 
-    dark_blue = PatternFill("solid", fgColor="1F4E79")
-    medium_blue = PatternFill("solid", fgColor="2E75B6")
-    alt_blue = PatternFill("solid", fgColor="4472C4")
-    light_blue = PatternFill("solid", fgColor="BDD7EE")
-    gold_fill = PatternFill("solid", fgColor="FFD700")
-    gray_fill = PatternFill("solid", fgColor="F2F2F2")
-    white_fill = PatternFill("solid", fgColor="FFFFFF")
-    total_fill = PatternFill("solid", fgColor="FFFACD")
-
-    for cell in ws[1]:
-        cell.fill = dark_blue
-        cell.font = Font(bold=True, color="FFFFFF", size=14)
-        cell.alignment = Alignment(horizontal="center", vertical="center")
+    for col_idx in range(1, max_col + 1):
+        style_cell(
+            ws.cell(1, col_idx),
+            fill=THEME_NAVY,
+            font=report_font(bold=True, color="FFFFFF", size=15),
+            align=Alignment(horizontal="center", vertical="center"),
+            border=MEDIUM_BOTTOM_BORDER,
+        )
 
     for col_idx in range(1, max_col + 1):
         cell = ws.cell(2, col_idx)
         if col_idx == 1:
-            cell.fill = medium_blue
+            group_fill = THEME_NAVY
+        elif col_idx >= max_col - 1:
+            group_fill = THEME_GREEN
         else:
             brand_group = (col_idx - 2) // 2
-            cell.fill = medium_blue if brand_group % 2 == 0 else alt_blue
-        cell.font = Font(bold=True, color="FFFFFF")
-        cell.alignment = Alignment(horizontal="center", vertical="center")
+            group_fill = THEME_BLUE if brand_group % 2 == 0 else THEME_BLUE_DARK
+        style_cell(
+            cell,
+            fill=group_fill,
+            font=report_font(bold=True, color="FFFFFF", size=10),
+            align=Alignment(horizontal="center", vertical="center", wrap_text=True),
+            border=MEDIUM_BOTTOM_BORDER,
+        )
 
         sub_cell = ws.cell(3, col_idx)
-        sub_cell.fill = light_blue
-        sub_cell.font = Font(bold=True, color="000000")
-        sub_cell.alignment = Alignment(horizontal="center", vertical="center")
+        style_cell(
+            sub_cell,
+            fill=THEME_HEADER,
+            font=report_font(bold=True, color=THEME_NAVY, size=10),
+            align=Alignment(horizontal="center", vertical="center", wrap_text=True),
+            border=MEDIUM_BOTTOM_BORDER,
+        )
 
     total_start_col = max_col - 1
     for row_idx in range(4, ws.max_row + 1):
         is_total_row = ws.cell(row_idx, 1).value == "GRAND TOTAL"
         for col_idx in range(1, max_col + 1):
             cell = ws.cell(row_idx, col_idx)
+            is_total_col = col_idx >= total_start_col
             if is_total_row:
-                cell.fill = gold_fill
-                cell.font = Font(bold=True)
-            elif col_idx >= total_start_col:
-                cell.fill = total_fill
-                cell.font = Font(bold=True)
+                fill = THEME_TOTAL
+                font = report_font(bold=True)
+                border = MEDIUM_BOTTOM_BORDER
+            elif is_total_col:
+                fill = "EAF7F1"
+                font = report_font(bold=True)
+                border = THIN_BORDER
             else:
-                cell.fill = gray_fill if row_idx % 2 == 1 else white_fill
-
-    for row in ws.iter_rows(min_row=1, max_row=ws.max_row, min_col=1, max_col=max_col):
-        for cell in row:
-            cell.border = THIN_BORDER
-            cell.alignment = Alignment(horizontal="center" if cell.column > 1 else "left", vertical="center")
+                fill = THEME_SOFT if row_idx % 2 == 0 else "FFFFFF"
+                font = report_font()
+                border = THIN_BORDER
+            style_cell(
+                cell,
+                fill=fill,
+                font=font,
+                align=Alignment(
+                    horizontal="left" if col_idx == 1 else "right",
+                    vertical="center",
+                    wrap_text=(col_idx == 1),
+                ),
+                border=border,
+            )
+        ws.row_dimensions[row_idx].height = 22
 
     for row_idx in range(4, ws.max_row + 1):
         for col_idx in range(2, max_col + 1):
-            ws.cell(row_idx, col_idx).number_format = "#,##0.00"
+            cell = ws.cell(row_idx, col_idx)
+            cell.value = rounded_integer(cell.value)
+            cell.number_format = "#,##0"
 
-    ws.column_dimensions["A"].width = 40
+    ws.column_dimensions["A"].width = 42
     for col_idx in range(2, max_col + 1):
-        ws.column_dimensions[get_column_letter(col_idx)].width = 14
+        ws.column_dimensions[get_column_letter(col_idx)].width = 15
     ws.freeze_panes = "B4"
+    set_print_layout(ws, max_col)
 
 
 def generate_report(target_date: date, output_path: Path) -> None:
