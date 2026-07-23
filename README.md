@@ -191,7 +191,7 @@ Processing:
 Required columns:
 
 ```text
-ID Store, Store Name, COMPANYBRANDNAME, Main Category, Sub Category,
+ID Store, Store Name, Main Category, Sub Category,
 ID Model, Product code, Product name, Inventory Status, Quantity_1, QUANTITYEX
 ```
 
@@ -200,7 +200,9 @@ Processing:
 - Strips numeric category prefixes, for example `1584 - INDO - Laptop` becomes `INDO - Laptop`.
 - Keeps rows where both cleaned `Main Category` and cleaned `Sub Category` contain `Laptop`, case-insensitive.
 - Extracts brand from `Product name` pattern `Laptop [Brand] [model]`.
-- Falls back to `COMPANYBRANDNAME` if the product name does not match that pattern.
+- Maps product names starting with `Macbook` to `Apple`.
+- Uses `UNKNOWN` when the product name does not identify a brand; `COMPANYBRANDNAME=ERABLUE` is not treated as a laptop brand.
+- Detects the stock date from an `YYYYMMDD` value in the filename and allows correction in the web form.
 - `1-New` and `5-Error (New)` are counted as `new_stock`.
 - `3-Show` and `7-Show (Sample)` are counted as `demo_units`.
 - `stock_volume = new_stock + demo_units`.

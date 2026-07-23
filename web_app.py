@@ -1,5 +1,5 @@
 import sys
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from numbers import Number
 from pathlib import Path
 
@@ -15,7 +15,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from config.database import ensure_schema, get_connection  # noqa: E402
 from etl.upload_sales import upload_sales  # noqa: E402
-from etl.upload_stock import upload_stock  # noqa: E402
+from etl.upload_stock import stock_date_from_filename, upload_stock  # noqa: E402
 from reports.generate_laptop_report import generate_report  # noqa: E402
 
 
@@ -823,14 +823,6 @@ def latest_stock_date() -> date | None:
         return None
 
 
-def default_report_date() -> date:
-    stock_date = latest_stock_date()
-    if stock_date:
-        return stock_date
-    sales_date = latest_sales_date()
-    return sales_date + timedelta(days=1)
-
-
 def show_database_status() -> None:
     ok, message = db_status()
     latest_date = latest_sales_date() if ok else None
@@ -870,9 +862,24 @@ def sales_tab(uploaded_by: str) -> None:
                 st.error(f"Sales upload failed: {exc}")
 
 
-def stock_tab(uploaded_by: str, stock_date: date) -> None:
+def stock_tab(uploaded_by: str, default_stock_date: date) -> None:
     st.markdown('<div class="section-title">Stock Upload</div>', unsafe_allow_html=True)
     stock_file = st.file_uploader("GeneralInventory file", type=ALLOWED_TYPES, key="stock_file")
+
+    detected_stock_date = (
+        stock_date_from_filename(stock_file.name, default_stock_date)
+        if stock_file
+        else default_stock_date
+    )
+    date_key = f"stock_date_{clean_name(stock_file.name)}" if stock_file else "stock_date_empty"
+    stock_date = st.date_input(
+        "Stock date",
+        value=detected_stock_date,
+        format="YYYY-MM-DD",
+        key=date_key,
+    )
+    if stock_file and detected_stock_date != default_stock_date:
+        st.caption(f"Detected from filename: {detected_stock_date:%Y-%m-%d}")
 
     upload_clicked = st.button("Upload Stock", type="primary", use_container_width=True)
 
@@ -1273,7 +1280,7 @@ def generated_data_panel(default_sales_date: date) -> None:
                 st.warning(f"Visualisasi tidak tersedia: {exc}")
 
 
-def upload_workflow_panel(uploaded_by: str, target_date: date) -> None:
+def upload_workflow_panel(uploaded_by: str, default_stock_date: date) -> None:
     with st.container(border=True):
         st.markdown('<div class="panel-title">Upload Data</div>', unsafe_allow_html=True)
         st.markdown(
@@ -1282,7 +1289,7 @@ def upload_workflow_panel(uploaded_by: str, target_date: date) -> None:
         )
         sales_tab(uploaded_by)
         st.divider()
-        stock_tab(uploaded_by, target_date)
+        stock_tab(uploaded_by, default_stock_date)
 
 
 def main() -> None:
@@ -1290,17 +1297,15 @@ def main() -> None:
     setup_page()
     render_app_chrome()
 
-    suggested_date = default_report_date()
     default_sales_date = latest_sales_date()
     uploaded_by = "Yusuf"
-    target_date = suggested_date
 
     show_database_status()
     st.write("")
 
     upload_col, generated_col = st.columns([0.78, 1.62], gap="large")
     with upload_col:
-        upload_workflow_panel(uploaded_by, target_date)
+        upload_workflow_panel(uploaded_by, default_sales_date)
     with generated_col:
         generated_data_panel(default_sales_date)
 

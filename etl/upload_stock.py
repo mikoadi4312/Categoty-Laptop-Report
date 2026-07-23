@@ -1,6 +1,7 @@
 import argparse
+import re
 import sys
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 
 import pandas as pd
@@ -17,7 +18,6 @@ from config.database import get_connection  # noqa: E402
 REQUIRED_COLUMNS = [
     "ID Store",
     "Store Name",
-    "COMPANYBRANDNAME",
     "Main Category",
     "Sub Category",
     "ID Model",
@@ -60,6 +60,29 @@ def strip_numeric_prefix(category: str) -> str:
     return text
 
 
+def extract_brand(product_name) -> str:
+    name = " ".join(str(product_name or "").strip().split())
+    if not name or name.lower() == "nan":
+        return "UNKNOWN"
+    if name.lower().startswith("macbook"):
+        return "Apple"
+
+    match = re.match(r"^Laptop\s+([^\s/]+)", name, flags=re.IGNORECASE)
+    if not match:
+        return "UNKNOWN"
+    return normalize_brand(match.group(1).strip(".,;:()[]{}"))
+
+
+def stock_date_from_filename(filename: str, fallback: date) -> date:
+    candidates = []
+    for value in re.findall(r"20\d{6}", filename):
+        try:
+            candidates.append(datetime.strptime(value, "%Y%m%d").date())
+        except ValueError:
+            continue
+    return max(candidates) if candidates else fallback
+
+
 def read_input_file(path: Path) -> pd.DataFrame:
     suffix = path.suffix.lower()
     if suffix in {".xlsx", ".xlsm", ".xls"}:
@@ -95,8 +118,7 @@ def prepare_stock(file_path: Path, stock_date) -> pd.DataFrame:
     df["id_store"] = pd.to_numeric(df["ID Store"], errors="coerce")
     df["store_name"] = df["Store Name"].replace({"": "UNKNOWN STORE"}).fillna("UNKNOWN STORE")
     df["quantity"] = pd.to_numeric(df["Quantity_1"], errors="coerce").fillna(0).round().astype(int)
-    product_brand = df["Product name"].astype(str).str.extract(r"(?i)^Laptop\s+(\S+)", expand=False)
-    df["brand"] = product_brand.fillna(df["COMPANYBRANDNAME"]).apply(normalize_brand)
+    df["brand"] = df["Product name"].apply(extract_brand)
     df["stock_date"] = stock_date
     df = df.dropna(subset=["id_store"])
     df["id_store"] = df["id_store"].astype(int)
