@@ -3,6 +3,7 @@ from datetime import date, datetime, timedelta
 from numbers import Number
 from pathlib import Path
 
+import altair as alt
 import pandas as pd
 import streamlit as st
 from openpyxl import load_workbook
@@ -1015,6 +1016,186 @@ def render_report_preview(path: Path, sheet_name: str) -> None:
     st.markdown(f'<div class="preview-table-wrap">{preview_html}</div>', unsafe_allow_html=True)
 
 
+def report_number(value: object) -> float:
+    number = coerce_preview_number(value)
+    return number if number is not None else 0.0
+
+
+def prepare_visualization_data(path: Path) -> tuple[pd.DataFrame, pd.DataFrame, pd.Series]:
+    laptop_df = preview_report_data(path, "LAPTOP REPORT")
+    shop_df = preview_report_data(path, "SHOP LEVEL")
+
+    total_rows = laptop_df[laptop_df["BRAND"].astype(str).str.upper() == "GRAND TOTAL"]
+    total = total_rows.iloc[0] if not total_rows.empty else laptop_df.sum(numeric_only=True)
+    laptop_df = laptop_df[laptop_df["BRAND"].astype(str).str.upper() != "GRAND TOTAL"].copy()
+    shop_df = shop_df[shop_df["STORE NAME"].astype(str).str.upper() != "GRAND TOTAL"].copy()
+
+    for column in laptop_df.columns:
+        if column != "BRAND":
+            laptop_df[column] = laptop_df[column].apply(report_number)
+    for column in shop_df.columns:
+        if column != "STORE NAME":
+            shop_df[column] = shop_df[column].apply(report_number)
+    return laptop_df, shop_df, total
+
+
+def style_chart(chart: alt.Chart) -> alt.Chart:
+    return (
+        chart.configure_view(stroke=None)
+        .configure_axis(
+            labelColor="#475569",
+            titleColor="#64748b",
+            gridColor="#e2e8f0",
+            domainColor="#cbd5e1",
+            tickColor="#cbd5e1",
+            labelFontSize=11,
+            titleFontSize=11,
+        )
+        .configure_title(
+            color="#1e293b",
+            fontSize=15,
+            fontWeight=700,
+            anchor="start",
+            offset=14,
+        )
+        .configure_legend(
+            labelColor="#475569",
+            titleColor="#475569",
+            orient="top",
+            direction="horizontal",
+        )
+    )
+
+
+def render_visualization(path: Path) -> None:
+    laptop_df, shop_df, total = prepare_visualization_data(path)
+    if laptop_df.empty:
+        st.info("Belum ada data yang dapat divisualisasikan.")
+        return
+
+    day_revenue = report_number(total.get("DAY Rev (IDR)"))
+    mtd_revenue = report_number(total.get("MTD Rev (IDR)"))
+    mtd_qty = report_number(total.get("MTD Qty"))
+    stock_units = report_number(total.get("New")) + report_number(total.get("Demo"))
+    growth_rate = report_number(total.get("GROWTH RATE")) * 100
+
+    metric_cols = st.columns(4)
+    metric_cols[0].metric("Day Revenue", f"Rp {format_id_number(day_revenue)}")
+    metric_cols[1].metric(
+        "MTD Revenue",
+        f"Rp {format_id_number(mtd_revenue)}",
+        delta=f"{growth_rate:.2f}% vs same period".replace(".", ","),
+    )
+    metric_cols[2].metric("MTD Quantity", format_id_number(mtd_qty))
+    metric_cols[3].metric("Stock Units", format_id_number(stock_units))
+
+    revenue_data = laptop_df[["BRAND", "MTD Rev (IDR)"]].copy()
+    revenue_data["Revenue Label"] = revenue_data["MTD Rev (IDR)"].apply(
+        lambda value: f"Rp {format_id_number(value)}"
+    )
+    revenue_chart = (
+        alt.Chart(revenue_data)
+        .mark_bar(cornerRadiusEnd=4, color="#2563eb")
+        .encode(
+            x=alt.X("MTD Rev (IDR):Q", title="MTD Revenue (IDR)", axis=alt.Axis(format="~s")),
+            y=alt.Y("BRAND:N", title=None, sort="-x"),
+            tooltip=[
+                alt.Tooltip("BRAND:N", title="Brand"),
+                alt.Tooltip("Revenue Label:N", title="MTD Revenue"),
+            ],
+        )
+        .properties(title="MTD Revenue by Brand", height=max(260, len(revenue_data) * 31))
+    )
+
+    stock_data = laptop_df[["BRAND", "New", "Demo"]].melt(
+        id_vars="BRAND",
+        value_vars=["New", "Demo"],
+        var_name="Stock Type",
+        value_name="Units",
+    )
+    stock_chart = (
+        alt.Chart(stock_data)
+        .mark_bar(cornerRadiusTopLeft=3, cornerRadiusTopRight=3)
+        .encode(
+            x=alt.X("BRAND:N", title=None, sort=alt.EncodingSortField(field="Units", op="sum", order="descending")),
+            y=alt.Y("Units:Q", title="Units", axis=alt.Axis(format="~s")),
+            color=alt.Color(
+                "Stock Type:N",
+                title=None,
+                scale=alt.Scale(domain=["New", "Demo"], range=["#0f8f5f", "#f59e0b"]),
+            ),
+            tooltip=[
+                alt.Tooltip("BRAND:N", title="Brand"),
+                alt.Tooltip("Stock Type:N", title="Stock"),
+                alt.Tooltip("Units:Q", title="Units", format=",.0f"),
+            ],
+        )
+        .properties(title="Stock Composition", height=260)
+    )
+
+    growth_data = laptop_df[["BRAND", "GROWTH RATE"]].copy()
+    growth_data["Growth Percent"] = growth_data["GROWTH RATE"] * 100
+    growth_chart = (
+        alt.Chart(growth_data)
+        .mark_bar(cornerRadiusEnd=4)
+        .encode(
+            x=alt.X("Growth Percent:Q", title="Growth vs Same Period", axis=alt.Axis(format=".1f")),
+            y=alt.Y("BRAND:N", title=None, sort="-x"),
+            color=alt.condition(
+                alt.datum["Growth Percent"] >= 0,
+                alt.value("#0f8f5f"),
+                alt.value("#dc2626"),
+            ),
+            tooltip=[
+                alt.Tooltip("BRAND:N", title="Brand"),
+                alt.Tooltip("Growth Percent:Q", title="Growth (%)", format=".2f"),
+            ],
+        )
+        .properties(title="Brand Growth Rate", height=max(260, len(growth_data) * 31))
+    )
+
+    if shop_df.empty:
+        top_shop_data = pd.DataFrame(columns=["STORE NAME", "TOTAL MTD Rev"])
+    else:
+        top_shop_data = (
+            shop_df[["STORE NAME", "TOTAL MTD Rev"]]
+            .nlargest(15, "TOTAL MTD Rev")
+            .sort_values("TOTAL MTD Rev", ascending=True)
+            .copy()
+        )
+    top_shop_data["Revenue Label"] = top_shop_data["TOTAL MTD Rev"].apply(
+        lambda value: f"Rp {format_id_number(value)}"
+    )
+    shop_chart = (
+        alt.Chart(top_shop_data)
+        .mark_bar(cornerRadiusEnd=4, color="#0891b2")
+        .encode(
+            x=alt.X("TOTAL MTD Rev:Q", title="MTD Revenue (IDR)", axis=alt.Axis(format="~s")),
+            y=alt.Y("STORE NAME:N", title=None, sort=None),
+            tooltip=[
+                alt.Tooltip("STORE NAME:N", title="Store"),
+                alt.Tooltip("Revenue Label:N", title="MTD Revenue"),
+            ],
+        )
+        .properties(title="Top 15 Stores by MTD Revenue", height=420)
+    )
+
+    top_left, top_right = st.columns(2, gap="large")
+    with top_left:
+        st.altair_chart(style_chart(revenue_chart), width="stretch")
+    with top_right:
+        st.altair_chart(style_chart(stock_chart), width="stretch")
+
+    bottom_left, bottom_right = st.columns(2, gap="large")
+    with bottom_left:
+        st.altair_chart(style_chart(growth_chart), width="stretch")
+    with bottom_right:
+        if top_shop_data.empty:
+            st.info("Data Shop Level belum tersedia.")
+        else:
+            st.altair_chart(style_chart(shop_chart), width="stretch")
+
+
 def generated_data_panel(default_sales_date: date) -> None:
     st.markdown('<div class="section-title">Generated Data</div>', unsafe_allow_html=True)
 
@@ -1074,7 +1255,7 @@ def generated_data_panel(default_sales_date: date) -> None:
             else:
                 st.error(message)
 
-        laptop_tab, shop_tab = st.tabs(["Laptop Report", "Shop Level"])
+        laptop_tab, shop_tab, visualization_tab = st.tabs(["Laptop Report", "Shop Level", "Visualization"])
         with laptop_tab:
             try:
                 render_report_preview(selected, "LAPTOP REPORT")
@@ -1085,6 +1266,11 @@ def generated_data_panel(default_sales_date: date) -> None:
                 render_report_preview(selected, "SHOP LEVEL")
             except Exception as exc:
                 st.warning(f"Preview Shop Level tidak tersedia: {exc}")
+        with visualization_tab:
+            try:
+                render_visualization(selected)
+            except Exception as exc:
+                st.warning(f"Visualisasi tidak tersedia: {exc}")
 
 
 def upload_workflow_panel(uploaded_by: str, target_date: date) -> None:
