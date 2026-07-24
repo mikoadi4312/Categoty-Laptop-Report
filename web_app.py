@@ -823,6 +823,22 @@ def latest_stock_date() -> date | None:
         return None
 
 
+def stock_date_exists(stock_date: date) -> bool:
+    try:
+        conn = get_connection()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT EXISTS (SELECT 1 FROM fact_stock WHERE stock_date = %s)",
+                    (stock_date,),
+                )
+                return bool(cur.fetchone()[0])
+        finally:
+            conn.close()
+    except Exception:
+        return False
+
+
 def show_database_status() -> None:
     ok, message = db_status()
     latest_date = latest_sales_date() if ok else None
@@ -1203,16 +1219,22 @@ def render_visualization(path: Path) -> None:
             st.altair_chart(style_chart(shop_chart), width="stretch")
 
 
-def generated_data_panel(default_sales_date: date) -> None:
+def generated_data_panel(default_sales_date: date, default_stock_date: date) -> None:
     st.markdown('<div class="section-title">Generated Data</div>', unsafe_allow_html=True)
 
     with st.container(border=True):
         top_left, date_col, action_col = st.columns([1.25, 0.85, 0.9])
         with top_left:
             st.markdown("**Laptop report output**")
-            st.caption("Generate report based on the selected sales date.")
+            st.caption("Generate report using separate sales and stock dates.")
         with date_col:
             report_date = st.date_input("Sales date", value=default_sales_date, format="YYYY-MM-DD")
+            report_stock_date = st.date_input(
+                "Stock date",
+                value=default_stock_date,
+                format="YYYY-MM-DD",
+                key="report_stock_date",
+            )
         with action_col:
             st.markdown('<div class="button-label-spacer"></div>', unsafe_allow_html=True)
             generate_clicked = st.button("Generate Excel", type="primary", use_container_width=True)
@@ -1222,13 +1244,22 @@ def generated_data_panel(default_sales_date: date) -> None:
         status_message: tuple[str, str] | None = None
 
         if generate_clicked:
-            with st.spinner("Generating Excel report..."):
-                try:
-                    generate_report(report_date, output_path)
-                    st.session_state["latest_report"] = str(output_path)
-                    status_message = ("success", f"Report generated: {output_name}")
-                except Exception as exc:
-                    status_message = ("error", f"Report generation failed: {exc}")
+            if not stock_date_exists(report_stock_date):
+                status_message = (
+                    "error",
+                    f"Stock data for {report_stock_date:%Y-%m-%d} is not available. Upload GeneralInventory for that date first.",
+                )
+            else:
+                with st.spinner("Generating Excel report..."):
+                    try:
+                        generate_report(report_date, output_path, report_stock_date)
+                        st.session_state["latest_report"] = str(output_path)
+                        status_message = (
+                            "success",
+                            f"Report generated: {output_name} | Stock: {report_stock_date:%Y-%m-%d}",
+                        )
+                    except Exception as exc:
+                        status_message = ("error", f"Report generation failed: {exc}")
 
         files = generated_report_files()
         if not files:
@@ -1298,6 +1329,7 @@ def main() -> None:
     render_app_chrome()
 
     default_sales_date = latest_sales_date()
+    default_stock_date = latest_stock_date() or default_sales_date
     uploaded_by = "Yusuf"
 
     show_database_status()
@@ -1307,7 +1339,7 @@ def main() -> None:
     with upload_col:
         upload_workflow_panel(uploaded_by, default_sales_date)
     with generated_col:
-        generated_data_panel(default_sales_date)
+        generated_data_panel(default_sales_date, default_stock_date)
 
 
 if __name__ == "__main__":

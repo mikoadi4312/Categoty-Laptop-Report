@@ -110,14 +110,25 @@ def rounded_integer(value):
         return value
 
 
-def query_dataframe(engine, sql: str, target_date: date, sales_date: date | None = None) -> pd.DataFrame:
-    params = {"target_date": target_date, "sales_date": sales_date or target_date}
+def query_dataframe(
+    engine,
+    sql: str,
+    target_date: date,
+    sales_date: date | None = None,
+    stock_date: date | None = None,
+) -> pd.DataFrame:
+    params = {
+        "target_date": target_date,
+        "sales_date": sales_date or target_date,
+        "stock_date": stock_date or target_date,
+    }
     with engine.connect() as conn:
         return pd.read_sql_query(text(sql), conn, params=params)
 
 
-def build_laptop_report_df(engine, target_date: date) -> pd.DataFrame:
+def build_laptop_report_df(engine, target_date: date, stock_date: date | None = None) -> pd.DataFrame:
     sales_date = target_date
+    selected_stock_date = stock_date or target_date
     day_sql = """
         SELECT b.brand, SUM(s.day_qty) AS day_qty, SUM(s.day_revenue) AS day_rev
         FROM fact_sales s
@@ -154,18 +165,14 @@ def build_laptop_report_df(engine, target_date: date) -> pd.DataFrame:
                SUM(k.stock_volume) AS stock_volume
         FROM fact_stock k
         JOIN dim_brand b ON k.brand_id = b.id
-        WHERE k.stock_date = (
-            SELECT MAX(stock_date)
-            FROM fact_stock
-            WHERE stock_date <= :target_date
-        )
+        WHERE k.stock_date = :stock_date
         GROUP BY b.brand
     """
 
     day_df = query_dataframe(engine, day_sql, target_date, sales_date)
     mtd_df = query_dataframe(engine, mtd_sql, target_date, sales_date)
     same_period_df = query_dataframe(engine, same_period_sql, target_date, sales_date)
-    stock_df = query_dataframe(engine, stock_sql, target_date, sales_date)
+    stock_df = query_dataframe(engine, stock_sql, target_date, sales_date, selected_stock_date)
 
     current_laptop_brands = (
         set(day_df.get("brand", []))
@@ -332,13 +339,22 @@ def build_shop_level_df(engine, target_date: date) -> tuple[pd.DataFrame, list[s
     return df, brands
 
 
-def write_laptop_report_sheet(wb: Workbook, df: pd.DataFrame, target_date: date) -> None:
+def write_laptop_report_sheet(
+    wb: Workbook,
+    df: pd.DataFrame,
+    target_date: date,
+    stock_date: date,
+) -> None:
     ws = wb.active
     ws.title = "LAPTOP REPORT"
 
     max_col = len(REPORT_COLUMNS)
     ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=max_col)
-    ws.cell(1, 1, f"LAPTOP CATEGORY DAILY REPORT - {target_date:%Y-%m-%d}")
+    ws.cell(
+        1,
+        1,
+        f"LAPTOP CATEGORY DAILY REPORT | SALES {target_date:%Y-%m-%d} | STOCK {stock_date:%Y-%m-%d}",
+    )
     ws.row_dimensions[1].height = 30
     ws.row_dimensions[2].height = 24
     ws.row_dimensions[3].height = 28
@@ -553,13 +569,14 @@ def write_shop_level_sheet(wb: Workbook, df: pd.DataFrame, brands: list[str], ta
     set_print_layout(ws, max_col)
 
 
-def generate_report(target_date: date, output_path: Path) -> None:
+def generate_report(target_date: date, output_path: Path, stock_date: date | None = None) -> None:
+    selected_stock_date = stock_date or target_date
     engine = get_engine()
-    laptop_df = build_laptop_report_df(engine, target_date)
+    laptop_df = build_laptop_report_df(engine, target_date, selected_stock_date)
     shop_df, brands = build_shop_level_df(engine, target_date)
 
     wb = Workbook()
-    write_laptop_report_sheet(wb, laptop_df, target_date)
+    write_laptop_report_sheet(wb, laptop_df, target_date, selected_stock_date)
     write_shop_level_sheet(wb, shop_df, brands, target_date)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -569,14 +586,16 @@ def generate_report(target_date: date, output_path: Path) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Generate LAPTOP daily Excel report.")
     parser.add_argument("--date", help="Target date, YYYY-MM-DD. Defaults to today.")
+    parser.add_argument("--stock-date", help="Stock snapshot date, YYYY-MM-DD. Defaults to target date.")
     parser.add_argument("--output", help="Output filename. Defaults to LAPTOP_REPORT_YYYYMMDD.xlsx.")
     args = parser.parse_args()
 
     target_date = parse_date(args.date)
+    stock_date = parse_date(args.stock_date) if args.stock_date else target_date
     output = args.output or f"LAPTOP_REPORT_{target_date:%Y%m%d}.xlsx"
     output_path = Path(output).expanduser().resolve()
 
-    generate_report(target_date, output_path)
+    generate_report(target_date, output_path, stock_date)
     print(f"Report generated: {output_path}")
 
 

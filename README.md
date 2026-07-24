@@ -158,10 +158,10 @@ Upload stock:
 python etl/upload_stock.py --file GeneralInventory_YYYYMMDD.xlsx --uploaded_by "YourName" --date YYYY-MM-DD
 ```
 
-Generate report:
+Generate report with separate sales and stock dates:
 
 ```bash
-python reports/generate_laptop_report.py --date YYYY-MM-DD --output LAPTOP_REPORT_YYYYMMDD.xlsx
+python reports/generate_laptop_report.py --date YYYY-MM-DD --stock-date YYYY-MM-DD --output LAPTOP_REPORT_YYYYMMDD.xlsx
 ```
 
 Re-uploading the same file is safe. Sales and stock tables use upserts on date, store, and brand, so rows are updated instead of duplicated.
@@ -213,7 +213,7 @@ Processing:
 
 - Day sales are taken from `fact_sales.sale_date = target date`.
 - MTD sales are month-to-date through the target date.
-- Stock is taken from the latest `fact_stock.stock_date` available on or before the target date.
+- Stock is taken from the exact stock snapshot date selected in the web form or `--stock-date` argument.
 - Stock Day is calculated as `stock_volume / (mtd_qty / target_date.day)`.
 - Same-period quantity, same-period revenue, and growth rate are currently set to `0`.
 - Brands are sorted by MTD revenue descending.
