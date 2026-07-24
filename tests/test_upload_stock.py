@@ -26,7 +26,9 @@ class PrepareStockTest(unittest.TestCase):
         by_brand = result.set_index("brand")
         self.assertEqual(int(by_brand.loc["Apple", "new_stock"]), 2)
         self.assertEqual(int(by_brand.loc["Acer", "demo_units"]), 3)
-        self.assertEqual(int(by_brand.loc["UNKNOWN", "new_stock"]), 4)
+        self.assertEqual(int(by_brand.loc["UNKNOWN", "new_stock"]), 0)
+        self.assertEqual(int(by_brand.loc["UNKNOWN", "error_new_units"]), 4)
+        self.assertEqual(int(by_brand.loc["UNKNOWN", "stock_volume"]), 4)
 
     def test_stock_date_is_detected_from_filename(self) -> None:
         fallback = date(2026, 7, 1)

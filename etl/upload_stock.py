@@ -28,7 +28,8 @@ REQUIRED_COLUMNS = [
     "QUANTITYEX",
 ]
 
-NEW_STATUSES = {"1-New", "5-Error (New)"}
+NEW_STATUSES = {"1-New"}
+ERROR_NEW_STATUSES = {"5-Error (New)"}
 DEMO_STATUSES = {"3-Show", "7-Show (Sample)"}
 
 BRAND_CANONICAL = {
@@ -124,6 +125,10 @@ def prepare_stock(file_path: Path, stock_date) -> pd.DataFrame:
     df["id_store"] = df["id_store"].astype(int)
 
     df["new_stock"] = df["quantity"].where(df["Inventory Status"].isin(NEW_STATUSES), 0).astype(int)
+    df["error_new_units"] = df["quantity"].where(
+        df["Inventory Status"].isin(ERROR_NEW_STATUSES),
+        0,
+    ).astype(int)
     df["demo_units"] = df["quantity"].where(df["Inventory Status"].isin(DEMO_STATUSES), 0).astype(int)
 
     grouped = (
@@ -131,10 +136,13 @@ def prepare_stock(file_path: Path, stock_date) -> pd.DataFrame:
         .agg(
             store_name=("store_name", "last"),
             new_stock=("new_stock", "sum"),
+            error_new_units=("error_new_units", "sum"),
             demo_units=("demo_units", "sum"),
         )
     )
-    grouped["stock_volume"] = grouped["new_stock"] + grouped["demo_units"]
+    grouped["stock_volume"] = (
+        grouped["new_stock"] + grouped["error_new_units"] + grouped["demo_units"]
+    )
     return grouped
 
 
@@ -196,6 +204,7 @@ def upsert_fact_stock(
             store_ids[int(row.id_store)],
             brand_ids[row.brand],
             int(row.new_stock),
+            int(row.error_new_units),
             int(row.demo_units),
             int(row.stock_volume),
             uploaded_by,
@@ -209,11 +218,12 @@ def upsert_fact_stock(
         """
         INSERT INTO fact_stock (
             stock_date, store_id, brand_id, new_stock,
-            demo_units, stock_volume, uploaded_by
+            error_new_units, demo_units, stock_volume, uploaded_by
         )
         VALUES %s
         ON CONFLICT (stock_date, store_id, brand_id) DO UPDATE
         SET new_stock = EXCLUDED.new_stock,
+            error_new_units = EXCLUDED.error_new_units,
             demo_units = EXCLUDED.demo_units,
             stock_volume = EXCLUDED.stock_volume,
             uploaded_at = NOW(),

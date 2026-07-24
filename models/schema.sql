@@ -27,12 +27,16 @@ CREATE TABLE IF NOT EXISTS fact_stock (
     store_id INT REFERENCES dim_store(id),
     brand_id INT REFERENCES dim_brand(id),
     new_stock INT DEFAULT 0,
+    error_new_units INT DEFAULT 0,
     demo_units INT DEFAULT 0,
     stock_volume INT DEFAULT 0,
     uploaded_at TIMESTAMP DEFAULT NOW(),
     uploaded_by VARCHAR(100),
     UNIQUE(stock_date, store_id, brand_id)
 );
+
+ALTER TABLE fact_stock
+ADD COLUMN IF NOT EXISTS error_new_units INT DEFAULT 0;
 
 CREATE TABLE IF NOT EXISTS upload_log (
     id SERIAL PRIMARY KEY,

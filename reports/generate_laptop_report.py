@@ -27,6 +27,7 @@ REPORT_COLUMNS = [
     "SP Qty",
     "SP Rev",
     "New",
+    "Error (New)",
     "Demo",
     "Stock Day",
     "GROWTH RATE",
@@ -161,6 +162,7 @@ def build_laptop_report_df(engine, target_date: date, stock_date: date | None = 
     stock_sql = """
         SELECT b.brand,
                SUM(k.new_stock) AS new_stock,
+               SUM(k.error_new_units) AS error_new_units,
                SUM(k.demo_units) AS demo_units,
                SUM(k.stock_volume) AS stock_volume
         FROM fact_stock k
@@ -196,6 +198,7 @@ def build_laptop_report_df(engine, target_date: date, stock_date: date | None = 
         "sp_qty",
         "sp_rev",
         "new_stock",
+        "error_new_units",
         "demo_units",
         "stock_volume",
     ]:
@@ -223,6 +226,7 @@ def build_laptop_report_df(engine, target_date: date, stock_date: date | None = 
             "sp_qty": "SP Qty",
             "sp_rev": "SP Rev",
             "new_stock": "New",
+            "error_new_units": "Error (New)",
             "demo_units": "Demo",
             "stock_day": "Stock Day",
             "growth_rate": "GROWTH RATE",
@@ -242,8 +246,9 @@ def build_total_row(df: pd.DataFrame, target_date: date) -> dict:
     sp_qty = int(df["SP Qty"].sum()) if "SP Qty" in df else 0
     sp_rev = money(df["SP Rev"].sum()) if "SP Rev" in df else 0.0
     new_stock = int(df["New"].sum()) if "New" in df else 0
+    error_new_units = int(df["Error (New)"].sum()) if "Error (New)" in df else 0
     demo_units = int(df["Demo"].sum()) if "Demo" in df else 0
-    stock_volume = new_stock + demo_units
+    stock_volume = new_stock + error_new_units + demo_units
     daily_rate = mtd_qty / target_date.day if target_date.day else 0
     stock_day = 0 if daily_rate == 0 else stock_volume / daily_rate
     growth_rate = 0 if sp_rev == 0 else (mtd_rev - sp_rev) / sp_rev
@@ -256,6 +261,7 @@ def build_total_row(df: pd.DataFrame, target_date: date) -> dict:
         "SP Qty": sp_qty,
         "SP Rev": sp_rev,
         "New": new_stock,
+        "Error (New)": error_new_units,
         "Demo": demo_units,
         "Stock Day": stock_day,
         "GROWTH RATE": growth_rate,
@@ -366,7 +372,7 @@ def write_laptop_report_sheet(
     ws.cell(2, 4, "MTD")
     ws.merge_cells("F2:G2")
     ws.cell(2, 6, "SAME PERIOD")
-    ws.merge_cells("H2:K2")
+    ws.merge_cells("H2:L2")
     ws.cell(2, 8, "STOCK")
 
     for col_idx, column in enumerate(REPORT_COLUMNS, start=1):
@@ -397,6 +403,7 @@ def write_laptop_report_sheet(
         9: THEME_GREEN,
         10: THEME_GREEN,
         11: THEME_GREEN,
+        12: THEME_GREEN,
     }
     for row_idx in [2, 3]:
         for col_idx in range(1, max_col + 1):
@@ -436,7 +443,7 @@ def write_laptop_report_sheet(
             )
         ws.row_dimensions[row_idx].height = 22
 
-    for col_idx in [2, 4, 6, 8, 9, 10]:
+    for col_idx in [2, 4, 6, 8, 9, 10, 11]:
         for row_idx in range(4, ws.max_row + 1):
             ws.cell(row_idx, col_idx).number_format = "#,##0"
     for col_idx in [3, 5, 7]:
@@ -445,7 +452,7 @@ def write_laptop_report_sheet(
             cell.value = rounded_integer(cell.value)
             cell.number_format = "#,##0"
     for row_idx in range(4, ws.max_row + 1):
-        ws.cell(row_idx, 11).number_format = "0.00%"
+        ws.cell(row_idx, 12).number_format = "0.00%"
 
     ws.column_dimensions["A"].width = 28
     for col_idx in range(2, max_col + 1):

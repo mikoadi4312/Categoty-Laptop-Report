@@ -1099,7 +1099,11 @@ def render_visualization(path: Path) -> None:
     day_revenue = report_number(total.get("DAY Rev (IDR)"))
     mtd_revenue = report_number(total.get("MTD Rev (IDR)"))
     mtd_qty = report_number(total.get("MTD Qty"))
-    stock_units = report_number(total.get("New")) + report_number(total.get("Demo"))
+    stock_units = (
+        report_number(total.get("New"))
+        + report_number(total.get("Error (New)"))
+        + report_number(total.get("Demo"))
+    )
     growth_rate = report_number(total.get("GROWTH RATE")) * 100
 
     metric_cols = st.columns(4)
@@ -1130,9 +1134,9 @@ def render_visualization(path: Path) -> None:
         .properties(title="MTD Revenue by Brand", height=max(260, len(revenue_data) * 31))
     )
 
-    stock_data = laptop_df[["BRAND", "New", "Demo"]].melt(
+    stock_data = laptop_df[["BRAND", "New", "Error (New)", "Demo"]].melt(
         id_vars="BRAND",
-        value_vars=["New", "Demo"],
+        value_vars=["New", "Error (New)", "Demo"],
         var_name="Stock Type",
         value_name="Units",
     )
@@ -1145,7 +1149,10 @@ def render_visualization(path: Path) -> None:
             color=alt.Color(
                 "Stock Type:N",
                 title=None,
-                scale=alt.Scale(domain=["New", "Demo"], range=["#0f8f5f", "#f59e0b"]),
+                scale=alt.Scale(
+                    domain=["New", "Error (New)", "Demo"],
+                    range=["#0f8f5f", "#dc2626", "#f59e0b"],
+                ),
             ),
             tooltip=[
                 alt.Tooltip("BRAND:N", title="Brand"),

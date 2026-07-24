@@ -203,9 +203,10 @@ Processing:
 - Maps product names starting with `Macbook` to `Apple`.
 - Uses `UNKNOWN` when the product name does not identify a brand; `COMPANYBRANDNAME=ERABLUE` is not treated as a laptop brand.
 - Detects the stock date from an `YYYYMMDD` value in the filename and allows correction in the web form.
-- `1-New` and `5-Error (New)` are counted as `new_stock`.
+- `1-New` is counted as `new_stock`.
+- `5-Error (New)` is counted separately as `error_new_units`.
 - `3-Show` and `7-Show (Sample)` are counted as `demo_units`.
-- `stock_volume = new_stock + demo_units`.
+- `stock_volume = new_stock + error_new_units + demo_units`.
 
 ## Report Logic
 
