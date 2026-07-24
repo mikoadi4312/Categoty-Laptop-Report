@@ -28,7 +28,7 @@ REPORT_COLUMNS = [
     "SP Rev",
     "New",
     "Error (New)",
-    "Demo",
+    "Display",
     "Stock Day",
     "GROWTH RATE",
 ]
@@ -227,7 +227,7 @@ def build_laptop_report_df(engine, target_date: date, stock_date: date | None = 
             "sp_rev": "SP Rev",
             "new_stock": "New",
             "error_new_units": "Error (New)",
-            "demo_units": "Demo",
+            "demo_units": "Display",
             "stock_day": "Stock Day",
             "growth_rate": "GROWTH RATE",
         }
@@ -247,8 +247,8 @@ def build_total_row(df: pd.DataFrame, target_date: date) -> dict:
     sp_rev = money(df["SP Rev"].sum()) if "SP Rev" in df else 0.0
     new_stock = int(df["New"].sum()) if "New" in df else 0
     error_new_units = int(df["Error (New)"].sum()) if "Error (New)" in df else 0
-    demo_units = int(df["Demo"].sum()) if "Demo" in df else 0
-    stock_volume = new_stock + error_new_units + demo_units
+    display_units = int(df["Display"].sum()) if "Display" in df else 0
+    stock_volume = new_stock + error_new_units + display_units
     daily_rate = mtd_qty / target_date.day if target_date.day else 0
     stock_day = 0 if daily_rate == 0 else stock_volume / daily_rate
     growth_rate = 0 if sp_rev == 0 else (mtd_rev - sp_rev) / sp_rev
@@ -262,7 +262,7 @@ def build_total_row(df: pd.DataFrame, target_date: date) -> dict:
         "SP Rev": sp_rev,
         "New": new_stock,
         "Error (New)": error_new_units,
-        "Demo": demo_units,
+        "Display": display_units,
         "Stock Day": stock_day,
         "GROWTH RATE": growth_rate,
     }

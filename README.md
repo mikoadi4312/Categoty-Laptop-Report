@@ -205,7 +205,7 @@ Processing:
 - Detects the stock date from an `YYYYMMDD` value in the filename and allows correction in the web form.
 - `1-New` is counted as `new_stock`.
 - `5-Error (New)` is counted separately as `error_new_units`.
-- `3-Show` and `7-Show (Sample)` are counted as `demo_units`.
+- `3-Show` and `7-Show (Sample)` are stored as `demo_units` and displayed as `Display` in the report.
 - `stock_volume = new_stock + error_new_units + demo_units`.
 
 ## Report Logic

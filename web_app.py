@@ -1102,7 +1102,7 @@ def render_visualization(path: Path) -> None:
     stock_units = (
         report_number(total.get("New"))
         + report_number(total.get("Error (New)"))
-        + report_number(total.get("Demo"))
+        + report_number(total.get("Display"))
     )
     growth_rate = report_number(total.get("GROWTH RATE")) * 100
 
@@ -1134,9 +1134,9 @@ def render_visualization(path: Path) -> None:
         .properties(title="MTD Revenue by Brand", height=max(260, len(revenue_data) * 31))
     )
 
-    stock_data = laptop_df[["BRAND", "New", "Error (New)", "Demo"]].melt(
+    stock_data = laptop_df[["BRAND", "New", "Error (New)", "Display"]].melt(
         id_vars="BRAND",
-        value_vars=["New", "Error (New)", "Demo"],
+        value_vars=["New", "Error (New)", "Display"],
         var_name="Stock Type",
         value_name="Units",
     )
@@ -1150,7 +1150,7 @@ def render_visualization(path: Path) -> None:
                 "Stock Type:N",
                 title=None,
                 scale=alt.Scale(
-                    domain=["New", "Error (New)", "Demo"],
+                    domain=["New", "Error (New)", "Display"],
                     range=["#0f8f5f", "#dc2626", "#f59e0b"],
                 ),
             ),
