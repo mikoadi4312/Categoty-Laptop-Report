@@ -183,7 +183,7 @@ Processing:
 - Strips whitespace from string columns.
 - Keeps rows where `MainCategory` contains `Laptop`, case-insensitive.
 - Aggregates by `sale_date`, `IDStore`, `Store Name`, and `Brand name`.
-- Sales quantity counts transaction rows after the LAPTOP filter, matching the operational manual report.
+- Sales quantity sums `Quantity_1` after the LAPTOP filter, including returns, zero quantities, and multi-unit transactions.
 - `REVENUE` is summed as IDR numeric value.
 
 ### Stock File

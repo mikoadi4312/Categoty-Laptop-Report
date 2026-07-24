@@ -74,6 +74,7 @@ def prepare_sales(file_path: Path) -> pd.DataFrame:
 
     df["sale_date"] = pd.to_datetime(df["DATE"], format="%d/%m/%Y", errors="coerce").dt.date
     df["id_store"] = pd.to_numeric(df["IDStore"], errors="coerce")
+    df["day_qty"] = pd.to_numeric(df["Quantity_1"], errors="coerce").fillna(0).round().astype(int)
     df["day_revenue"] = pd.to_numeric(df["REVENUE"], errors="coerce").fillna(0).round(2)
     df["store_name"] = df["Store Name"].replace({"": "UNKNOWN STORE"}).fillna("UNKNOWN STORE")
     df["brand"] = df["Brand name"].apply(normalize_brand)
@@ -90,7 +91,7 @@ def prepare_sales(file_path: Path) -> pd.DataFrame:
         df.groupby(["sale_date", "id_store", "brand"], as_index=False)
         .agg(
             store_name=("store_name", "last"),
-            day_qty=("Quantity_1", "size"),
+            day_qty=("day_qty", "sum"),
             day_revenue=("day_revenue", "sum"),
         )
     )

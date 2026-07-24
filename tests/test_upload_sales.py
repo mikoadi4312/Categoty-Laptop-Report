@@ -7,7 +7,7 @@ from etl import upload_sales
 
 
 class PrepareSalesTest(unittest.TestCase):
-    def test_quantity_counts_transaction_rows(self) -> None:
+    def test_quantity_sums_quantity_column(self) -> None:
         source = pd.DataFrame(
             [
                 self.sales_row(quantity=2, revenue=200),
@@ -23,7 +23,7 @@ class PrepareSalesTest(unittest.TestCase):
             upload_sales.read_input_file = original_reader
 
         self.assertEqual(len(result), 1)
-        self.assertEqual(int(result.iloc[0]["day_qty"]), 3)
+        self.assertEqual(int(result.iloc[0]["day_qty"]), 1)
         self.assertEqual(float(result.iloc[0]["day_revenue"]), 100.0)
 
     @staticmethod
