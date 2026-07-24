@@ -1223,12 +1223,10 @@ def generated_data_panel(default_sales_date: date, default_stock_date: date) -> 
     st.markdown('<div class="section-title">Generated Data</div>', unsafe_allow_html=True)
 
     with st.container(border=True):
-        top_left, date_col, action_col = st.columns([1.25, 0.85, 0.9])
-        with top_left:
-            st.markdown("**Laptop report output**")
-            st.caption("Generate report using separate sales and stock dates.")
-        with date_col:
+        sales_date_col, stock_date_col, action_col = st.columns([1, 1, 1])
+        with sales_date_col:
             report_date = st.date_input("Sales date", value=default_sales_date, format="YYYY-MM-DD")
+        with stock_date_col:
             report_stock_date = st.date_input(
                 "Stock date",
                 value=default_stock_date,
@@ -1276,7 +1274,7 @@ def generated_data_panel(default_sales_date: date, default_stock_date: date) -> 
             if session_path.exists():
                 selected = session_path
 
-        _, _, download_col = st.columns([1.25, 0.85, 0.9])
+        _, _, download_col = st.columns([1, 1, 1])
         with download_col:
             st.download_button(
                 label="Download Excel",
